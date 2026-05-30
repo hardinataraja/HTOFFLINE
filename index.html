@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SinyalLokal - Walkie Talkie QR</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -26,6 +27,7 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     
+    <!-- Library QR Code Generator & Scanner -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -45,6 +47,7 @@
 
     <div class="relative w-full h-screen max-w-md bg-tactical-900 flex flex-col justify-between shadow-2xl overflow-hidden border border-tactical-800 md:h-[850px] md:rounded-3xl">
         
+        <!-- Header -->
         <header class="p-5 border-b border-tactical-800 bg-tactical-800/50 flex justify-between items-center z-10">
             <div>
                 <h1 class="text-xs tracking-widest text-tactical-accent font-semibold font-digital uppercase">SinyalLokal QR</h1>
@@ -56,12 +59,13 @@
             </div>
         </header>
 
+        <!-- Layar LCD Taktis -->
         <main class="flex-1 flex flex-col justify-start p-5 space-y-4 overflow-y-auto">
             
             <div class="bg-black/40 border border-tactical-800 p-4 rounded-xl flex flex-col justify-center items-center relative">
                 <div class="w-full flex justify-between text-[10px] text-tactical-400 font-semibold uppercase mb-1">
                     <span>Sinyal Radio Lokal</span>
-                    <span>Mode QR Scanner</span>
+                    <span>Mode QR Scanner (Low Density)</span>
                 </div>
                 <div class="text-2xl font-bold font-digital text-tactical-accent tracking-widest py-1 glow-green">
                     CH-QR.SCAN <span class="text-sm">P2P</span>
@@ -71,8 +75,10 @@
                 </div>
             </div>
 
+            <!-- Area Interaksi Utama Koneksi -->
             <div class="bg-tactical-800/20 p-4 rounded-xl border border-tactical-800 space-y-4 flex-1 flex flex-col justify-between">
                 
+                <!-- Skenario Tombol Aksi -->
                 <div class="grid grid-cols-2 gap-2">
                     <button id="btnInitOffer" class="bg-tactical-700 hover:bg-tactical-600 p-3 rounded-xl border border-tactical-500 text-xs text-tactical-accent font-digital font-semibold text-center">
                         1. BUAT UNDANGAN (QR)
@@ -82,20 +88,26 @@
                     </button>
                 </div>
 
+                <!-- Wadah Dinamis untuk QR Code Generator / Scanner Kamera -->
                 <div class="flex-1 min-h-[180px] bg-black/40 rounded-xl border border-tactical-800 flex flex-col items-center justify-center p-2 relative overflow-hidden">
                     
-                    <div id="qrcodeContainer" class="hidden p-2 bg-white rounded-lg shadow-inner"></div>
+                    <!-- Tampilan QR Code yang Digenerate (Sengaja diberi padding putih lebar agar kontras tinggi) -->
+                    <div id="qrcodeContainer" class="hidden p-4 bg-white rounded-xl shadow-inner"></div>
                     
+                    <!-- Tampilan Kamera Scanner -->
                     <div id="scannerContainer" class="hidden w-full h-full rounded-lg overflow-hidden"></div>
                     
+                    <!-- Placeholder awal -->
                     <div id="placeholderText" class="text-xs text-center text-gray-500 max-w-[200px]">
                         Klik salah satu tombol di atas untuk memulai jabat tangan offline.
                     </div>
                 </div>
 
+                <!-- Penampung Token Tersembunyi -->
                 <input type="hidden" id="localToken">
                 <input type="hidden" id="remoteToken">
 
+                <!-- Tombol Eksekusi Final -->
                 <button id="btnConnectFinal" class="hidden w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-3 rounded-xl text-xs font-digital transition-all shadow-lg">
                     SAMBUNGKAN KONEKSI (FINAL)
                 </button>
@@ -103,6 +115,7 @@
 
         </main>
 
+        <!-- Area Transmisi Suara -->
         <footer class="p-6 bg-tactical-800/80 border-t border-tactical-700 rounded-t-3xl flex flex-col items-center justify-center space-y-4">
             
             <div class="flex items-center space-x-3 mb-1">
@@ -127,6 +140,7 @@
 
     <audio id="remoteAudio" autoplay class="hidden"></audio>
 
+    <!-- JavaScript Logika QR & WebRTC -->
     <script>
         let localStream, peerConnection, isHandsfree = false, isTransmitting = false;
         let audioContext, analyser, dataArray, animationId;
@@ -150,6 +164,26 @@
         const scannerContainer = document.getElementById('scannerContainer');
         const placeholderText = document.getElementById('placeholderText');
         const btnConnectFinal = document.getElementById('btnConnectFinal');
+
+        // --- ALGORITMA PENYUSUTAN DATA SDP (MUNGING) ---
+        // Menghapus data-data non-esensial agar ukuran teks menyusut 70% sehingga QR Code sangat renggang & gampang di-scan
+        function minifySDP(sdp) {
+            return sdp.split('\n')
+                .map(line => line.trim())
+                .filter(line => {
+                    // Hanya izinkan baris kritis WebRTC
+                    if (line.startsWith('a=candidate:')) {
+                        // Hanya pertahankan jalur IPv4 UDP (Buang jalur IPv6 dan TCP yang sangat panjang)
+                        return line.includes(' udp ') && !line.includes(':') && (line.includes('typ host') || line.includes('typ srflx'));
+                    }
+                    // Buang baris meta feedback audio tambahan yang tidak terlalu penting
+                    if (line.startsWith('a=extmap:') || line.startsWith('a=rtcp-fb:') || line.startsWith('a=rtcp-mux') || line.startsWith('a=msid')) {
+                        return false;
+                    }
+                    return line.length > 0;
+                })
+                .join('\n');
+        }
 
         // Setup Audio Mic
         async function setupAudio() {
@@ -179,9 +213,14 @@
             // Menangkap kandidat ICE baru jika ada pembaruan jalur secara real-time
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && peerConnection.localDescription) {
-                    const updatedToken = btoa(JSON.stringify(peerConnection.localDescription));
+                    const minified = minifySDP(peerConnection.localDescription.sdp);
+                    const localDescWithNewIce = {
+                        type: peerConnection.localDescription.type,
+                        sdp: minified
+                    };
+                    const updatedToken = btoa(JSON.stringify(localDescWithNewIce));
                     document.getElementById('localToken').value = updatedToken;
-                    // Hanya update visual QR jika container sedang aktif terlihat
+                    
                     if (!qrcodeContainer.classList.contains('hidden')) {
                         generateQrCodeVisual(updatedToken);
                     }
@@ -199,29 +238,31 @@
             qrcodeContainer.innerHTML = "";
             new QRCode(qrcodeContainer, {
                 text: textData,
-                width: 170,
-                height: 170,
-                correctLevel: QRCode.CorrectLevel.L // Gunakan level low agar densitas kotak tidak terlalu rapat dan mudah di-scan HP lain
+                width: 190, // Perbesar sedikit ukurannya agar mudah di-scan
+                height: 190,
+                correctLevel: QRCode.CorrectLevel.L // Low error correction = titik pixel jauh lebih besar dan sedikit
             });
         }
 
-        // PERBAIKAN UTAMA: Aksi 1 - Membuat Undangan (Offer) QR secara INSTAN
+        // Aksi 1 - Membuat Undangan (Offer) QR secara INSTAN (Sudah Diringkas)
         document.getElementById('btnInitOffer').addEventListener('click', async () => {
             const hasAudio = await setupAudio();
             if (!hasAudio) return;
 
             isOfferCreator = true;
-            placeholderText.innerText = "Membuat QR Code Jalur Lokal...";
+            placeholderText.innerText = "Membuka jalur sinyal nirkabel...";
             
             initPeerConnection();
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
 
-            // Langsung eksekusi pembuatan QR Code tanpa menunggu proses sinkronisasi eksternal selesai
-            const base64Token = btoa(JSON.stringify(peerConnection.localDescription));
-            document.getElementById('localToken').value = base64Token;
+            // Ringkas data SDP penawaran
+            const minifiedSdp = minifySDP(offer.sdp);
+            const rawDescription = { type: 'offer', sdp: minifiedSdp };
+            const base64Token = btoa(JSON.stringify(rawDescription));
             
+            document.getElementById('localToken').value = base64Token;
             generateQrCodeVisual(base64Token);
             
             placeholderText.classList.add('hidden');
@@ -244,7 +285,7 @@
 
             qrScanner.start(
                 { facingMode: "environment" },
-                { fps: 15, qrbox: 200 },
+                { fps: 20, qrbox: { width: 220, height: 220 } }, // Area fokus pemindaian yang ideal
                 async (decodedText) => {
                     qrScanner.stop().then(() => {
                         qrScanner = null;
@@ -252,8 +293,8 @@
                         processScannedToken(decodedText);
                     });
                 },
-                (errorMessage) => { /* Mengabaikan noise pencarian */ }
-            ).catch(err => alert("Kamera gagal diakses: " + err));
+                (errorMessage) => { /* Abaikan kegagalan frame pembacaan */ }
+            ).catch(err => alert("Kamera gagal diakses. Berikan izin akses kamera pada HP Anda terlebih dahulu."));
         });
 
         // Pemrosesan Token Hasil Scan QR
@@ -268,8 +309,11 @@
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
                     
-                    // Langsung generate QR balasan dari Orang Kedua untuk Orang Pertama
-                    const base64Answer = btoa(JSON.stringify(peerConnection.localDescription));
+                    // Ringkas data SDP jawaban Orang Kedua
+                    const minifiedSdp = minifySDP(answer.sdp);
+                    const rawDescription = { type: 'answer', sdp: minifiedSdp };
+                    const base64Answer = btoa(JSON.stringify(rawDescription));
+                    
                     document.getElementById('localToken').value = base64Answer;
                     generateQrCodeVisual(base64Answer);
 
@@ -277,7 +321,7 @@
                     scannerContainer.classList.add('hidden');
                     
                     placeholderText.className = "text-[11px] text-center text-tactical-accent font-semibold p-1 mt-1";
-                    placeholderText.innerText = "SUKSES MEMBACA! Sekarang arahkan balik QR Code di atas ke kamera pasangan Anda.";
+                    placeholderText.innerText = "SUKSES MEMBACA! Sekarang tunjukkan balik QR Code di atas ke pasangan Anda.";
                     placeholderText.classList.remove('hidden');
                 } else {
                     // Skenario Orang Pertama (Menerima QR Balasan dari Orang Kedua)
@@ -403,4 +447,3 @@
     </script>
 </body>
 </html>
-
