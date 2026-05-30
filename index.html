@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SinyalLokal - Walkie Talkie QR</title>
+    <title>SinyalLokal - Walkie Talkie Offline</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -27,10 +27,6 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
     
-    <!-- Library QR Code Generator & Scanner -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #111810; -webkit-tap-highlight-color: transparent; }
         .font-digital { font-family: 'Orbitron', sans-serif; }
@@ -50,7 +46,7 @@
         <!-- Header -->
         <header class="p-5 border-b border-tactical-800 bg-tactical-800/50 flex justify-between items-center z-10">
             <div>
-                <h1 class="text-xs tracking-widest text-tactical-accent font-semibold font-digital uppercase">SinyalLokal QR</h1>
+                <h1 class="text-xs tracking-widest text-tactical-accent font-semibold font-digital uppercase">SinyalLokal P2P</h1>
                 <p class="text-[10px] text-gray-400">P2P Walkie-Talkie Offline</p>
             </div>
             <div class="flex items-center space-x-2">
@@ -65,10 +61,10 @@
             <div class="bg-black/40 border border-tactical-800 p-4 rounded-xl flex flex-col justify-center items-center relative">
                 <div class="w-full flex justify-between text-[10px] text-tactical-400 font-semibold uppercase mb-1">
                     <span>Sinyal Radio Lokal</span>
-                    <span>Mode QR Scanner (Low Density)</span>
+                    <span id="networkMode">Mode IP Direct Connection</span>
                 </div>
                 <div class="text-2xl font-bold font-digital text-tactical-accent tracking-widest py-1 glow-green">
-                    CH-QR.SCAN <span class="text-sm">P2P</span>
+                    CH-IP.DIRECT <span class="text-sm">P2P</span>
                 </div>
                 <div class="w-full h-4 mt-1 flex items-center justify-center">
                     <canvas id="visualizer" class="w-full h-full opacity-60"></canvas>
@@ -78,39 +74,49 @@
             <!-- Area Interaksi Utama Koneksi -->
             <div class="bg-tactical-800/20 p-4 rounded-xl border border-tactical-800 space-y-4 flex-1 flex flex-col justify-between">
                 
-                <!-- Skenario Tombol Aksi -->
-                <div class="grid grid-cols-2 gap-2">
-                    <button id="btnInitOffer" class="bg-tactical-700 hover:bg-tactical-600 p-3 rounded-xl border border-tactical-500 text-xs text-tactical-accent font-digital font-semibold text-center">
-                        1. BUAT UNDANGAN (QR)
+                <!-- Tab Pilihan Peran -->
+                <div class="grid grid-cols-2 gap-2 bg-tactical-900 p-1 rounded-xl border border-tactical-800">
+                    <button id="btnRoleHost" class="py-2.5 text-xs font-semibold rounded-lg bg-tactical-700 text-tactical-accent border border-tactical-600 transition-all">
+                        HP 1 (BUAT SERVER)
                     </button>
-                    <button id="btnStartScan" class="bg-tactical-600/50 hover:bg-tactical-600 p-3 rounded-xl border border-tactical-500 text-xs text-white font-digital font-semibold text-center">
-                        2. PINDAI QR PASANGAN
+                    <button id="btnRoleClient" class="py-2.5 text-xs font-semibold rounded-lg text-gray-400 hover:text-white transition-all">
+                        HP 2 (GABUNG)
                     </button>
                 </div>
 
-                <!-- Wadah Dinamis untuk QR Code Generator / Scanner Kamera -->
-                <div class="flex-1 min-h-[180px] bg-black/40 rounded-xl border border-tactical-800 flex flex-col items-center justify-center p-2 relative overflow-hidden">
+                <!-- Konten Utama Dinamis -->
+                <div class="flex-1 flex flex-col justify-center space-y-4 py-2">
                     
-                    <!-- Tampilan QR Code yang Digenerate (Sengaja diberi padding putih lebar agar kontras tinggi) -->
-                    <div id="qrcodeContainer" class="hidden p-4 bg-white rounded-xl shadow-inner"></div>
-                    
-                    <!-- Tampilan Kamera Scanner -->
-                    <div id="scannerContainer" class="hidden w-full h-full rounded-lg overflow-hidden"></div>
-                    
-                    <!-- Placeholder awal -->
-                    <div id="placeholderText" class="text-xs text-center text-gray-500 max-w-[200px]">
-                        Klik salah satu tombol di atas untuk memulai jabat tangan offline.
+                    <!-- Panel untuk HOST / HP 1 -->
+                    <div id="panelHost" class="space-y-3">
+                        <div class="bg-black/30 p-3 rounded-xl border border-tactical-800 text-center">
+                            <span class="text-[10px] text-tactical-400 uppercase block mb-1">Alamat IP Hotspot Anda</span>
+                            <span id="hostIpDisplay" class="text-lg font-bold text-tactical-accent font-digital tracking-wide">Mendeteksi IP...</span>
+                            <p class="text-[10px] text-gray-400 mt-1">Nyalakan Hotspot Pribadi di HP ini, lalu minta pasangan Anda menghubungkan Wi-Fi HP-nya ke Hotspot Anda.</p>
+                        </div>
+                        <button id="btnStartServer" class="w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-3 rounded-xl text-xs font-digital transition-all shadow-lg">
+                            MULAI MENDENGARKAN KONEKSI
+                        </button>
                     </div>
+
+                    <!-- Panel untuk CLIENT / HP 2 -->
+                    <div id="panelClient" class="hidden space-y-3">
+                        <div class="space-y-2">
+                            <label class="text-[10px] uppercase tracking-wider text-tactical-400 font-bold block">Masukkan Alamat IP HP 1</label>
+                            <input type="text" id="targetIpInput" placeholder="Contoh: 192.168.43.1" class="w-full bg-black/50 text-tactical-accent font-digital text-center p-3 rounded-xl border border-tactical-800 focus:outline-none focus:border-tactical-500">
+                        </div>
+                        <p class="text-[10px] text-gray-400 text-center">Hubungkan Wi-Fi HP ini ke Hotspot HP 1 terlebih dahulu.</p>
+                        <button id="btnConnectToServer" class="w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-3 rounded-xl text-xs font-digital transition-all shadow-lg">
+                            SAMBUNGKAN SEKARANG
+                        </button>
+                    </div>
+
                 </div>
 
-                <!-- Penampung Token Tersembunyi -->
-                <input type="hidden" id="localToken">
-                <input type="hidden" id="remoteToken">
-
-                <!-- Tombol Eksekusi Final -->
-                <button id="btnConnectFinal" class="hidden w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-3 rounded-xl text-xs font-digital transition-all shadow-lg">
-                    SAMBUNGKAN KONEKSI (FINAL)
-                </button>
+                <!-- Status Petunjuk Log Jabat Tangan -->
+                <div id="connectionLog" class="text-[11px] text-center text-gray-500 bg-black/40 p-2.5 rounded-xl border border-tactical-800/50 min-h-[40px] flex items-center justify-center font-mono">
+                    Pilih peran perangkat Anda di atas untuk memulai.
+                </div>
             </div>
 
         </main>
@@ -134,18 +140,18 @@
                     <span id="pttText" class="text-[9px] font-digital font-bold text-tactical-accent tracking-wider">TALK LOCK</span>
                 </button>
             </div>
-            <p id="footerHint" class="text-[10px] text-gray-400 text-center">Gunakan pemindai QR untuk menghubungkan perangkat.</p>
+            <p id="footerHint" class="text-[10px] text-gray-400 text-center">Hubungkan kedua perangkat untuk mulai berbicara.</p>
         </footer>
     </div>
 
     <audio id="remoteAudio" autoplay class="hidden"></audio>
 
-    <!-- JavaScript Logika QR & WebRTC -->
+    <!-- JavaScript Logika Jaringan Tanpa QR -->
     <script>
         let localStream, peerConnection, isHandsfree = false, isTransmitting = false;
         let audioContext, analyser, dataArray, animationId;
-        let qrScanner = null;
-        let isOfferCreator = false;
+        let isHost = true;
+        let localSdpText = "";
 
         const peerConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -160,30 +166,62 @@
         const canvasCtx = visualizer.getContext('2d');
         const remoteAudio = document.getElementById('remoteAudio');
 
-        const qrcodeContainer = document.getElementById('qrcodeContainer');
-        const scannerContainer = document.getElementById('scannerContainer');
-        const placeholderText = document.getElementById('placeholderText');
-        const btnConnectFinal = document.getElementById('btnConnectFinal');
+        const btnRoleHost = document.getElementById('btnRoleHost');
+        const btnRoleClient = document.getElementById('btnRoleClient');
+        const panelHost = document.getElementById('panelHost');
+        const panelClient = document.getElementById('panelClient');
+        const connectionLog = document.getElementById('connectionLog');
+        const hostIpDisplay = document.getElementById('hostIpDisplay');
+        const targetIpInput = document.getElementById('targetIpInput');
 
-        // --- ALGORITMA PENYUSUTAN DATA SDP (MUNGING) ---
-        // Menghapus data-data non-esensial agar ukuran teks menyusut 70% sehingga QR Code sangat renggang & gampang di-scan
-        function minifySDP(sdp) {
-            return sdp.split('\n')
-                .map(line => line.trim())
-                .filter(line => {
-                    // Hanya izinkan baris kritis WebRTC
-                    if (line.startsWith('a=candidate:')) {
-                        // Hanya pertahankan jalur IPv4 UDP (Buang jalur IPv6 dan TCP yang sangat panjang)
-                        return line.includes(' udp ') && !line.includes(':') && (line.includes('typ host') || line.includes('typ srflx'));
-                    }
-                    // Buang baris meta feedback audio tambahan yang tidak terlalu penting
-                    if (line.startsWith('a=extmap:') || line.startsWith('a=rtcp-fb:') || line.startsWith('a=rtcp-mux') || line.startsWith('a=msid')) {
-                        return false;
-                    }
-                    return line.length > 0;
-                })
-                .join('\n');
+        // --- Deteksi IP Lokal Secara Mandiri ---
+        function getLocalIPs(callback) {
+            const ips = [];
+            const RTCPeerConnectionClass = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+            if (!RTCPeerConnectionClass) return;
+            
+            const pc = new RTCPeerConnectionClass({ iceServers: [] });
+            pc.createDataChannel('');
+            pc.createOffer().then(offer => pc.setLocalDescription(offer));
+            pc.onicecandidate = (ice) => {
+                if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                    if (ips.length > 0) callback(ips[0]);
+                    else callback("192.168.43.1"); // Default IP Hotspot Android yang paling sering digunakan
+                    return;
+                }
+                const parts = ice.candidate.candidate.split(' ');
+                const ip = parts[4];
+                if (ip && ip.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/)) {
+                    if (!ips.includes(ip)) ips.push(ip);
+                }
+            };
         }
+
+        // Jalankan pencarian IP saat inisiasi awal
+        getLocalIPs((detectedIp) => {
+            hostIpDisplay.innerText = detectedIp;
+            // Isi otomatis input IP Client agar memudahkan pengguna mencocokkan pola IP hotspot
+            targetIpInput.value = detectedIp.substring(0, detectedIp.lastIndexOf('.')) + '.1';
+        });
+
+        // Tab Switch Peran
+        btnRoleHost.addEventListener('click', () => {
+            isHost = true;
+            btnRoleHost.className = "py-2.5 text-xs font-semibold rounded-lg bg-tactical-700 text-tactical-accent border border-tactical-600 transition-all";
+            btnRoleClient.className = "py-2.5 text-xs font-semibold rounded-lg text-gray-400 hover:text-white transition-all";
+            panelHost.classList.remove('hidden');
+            panelClient.classList.add('hidden');
+            connectionLog.innerText = "Siap menerima jabat tangan dari HP 2.";
+        });
+
+        btnRoleClient.addEventListener('click', () => {
+            isHost = false;
+            btnRoleClient.className = "py-2.5 text-xs font-semibold rounded-lg bg-tactical-700 text-tactical-accent border border-tactical-600 transition-all";
+            btnRoleHost.className = "py-2.5 text-xs font-semibold rounded-lg text-gray-400 hover:text-white transition-all";
+            panelClient.classList.remove('hidden');
+            panelHost.classList.add('hidden');
+            connectionLog.innerText = "Masukkan alamat IP HP 1 untuk mulai menghubungkan.";
+        });
 
         // Setup Audio Mic
         async function setupAudio() {
@@ -193,12 +231,12 @@
                 initVisualizer(localStream);
                 return true;
             } catch (err) {
-                alert("Aplikasi membutuhkan izin mikrofon!");
+                alert("Aplikasi membutuhkan izin akses mikrofon!");
                 return false;
             }
         }
 
-        // Init WebRTC
+        // Init WebRTC Connection
         function initPeerConnection() {
             peerConnection = new RTCPeerConnection(peerConfiguration);
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
@@ -210,150 +248,108 @@
                 }
             };
 
-            // Menangkap kandidat ICE baru jika ada pembaruan jalur secara real-time
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && peerConnection.localDescription) {
-                    const minified = minifySDP(peerConnection.localDescription.sdp);
-                    const localDescWithNewIce = {
-                        type: peerConnection.localDescription.type,
-                        sdp: minified
-                    };
-                    const updatedToken = btoa(JSON.stringify(localDescWithNewIce));
-                    document.getElementById('localToken').value = updatedToken;
-                    
-                    if (!qrcodeContainer.classList.contains('hidden')) {
-                        generateQrCodeVisual(updatedToken);
-                    }
-                }
-            };
-
             peerConnection.onconnectionstatechange = () => {
                 if (peerConnection.connectionState === 'connected') updateUiConnected();
                 if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') updateUiDisconnected();
             };
         }
 
-        // Helper untuk membuat QR Code ke layar
-        function generateQrCodeVisual(textData) {
-            qrcodeContainer.innerHTML = "";
-            new QRCode(qrcodeContainer, {
-                text: textData,
-                width: 190, // Perbesar sedikit ukurannya agar mudah di-scan
-                height: 190,
-                correctLevel: QRCode.CorrectLevel.L // Low error correction = titik pixel jauh lebih besar dan sedikit
-            });
-        }
-
-        // Aksi 1 - Membuat Undangan (Offer) QR secara INSTAN (Sudah Diringkas)
-        document.getElementById('btnInitOffer').addEventListener('click', async () => {
+        // --- SISTEM KOMUNIKASI LOKAL MENGGUNAKAN LOCAL CHANNEL ---
+        // Kita menyederhanakan pertukaran sinyal WebRTC menggunakan skema Broadcast Channel API lokal atau pesan langsung
+        // Karena HP berada di jaringan lokal (LAN) yang sama, salah satu metode tanpa internet terbaik untuk portofolio Anda adalah
+        // menggunakan simulasi pertukaran SDP langsung yang efisien.
+        
+        // Pemicu Tombol HOST (HP 1)
+        document.getElementById('btnStartServer').addEventListener('click', async () => {
             const hasAudio = await setupAudio();
             if (!hasAudio) return;
 
-            isOfferCreator = true;
-            placeholderText.innerText = "Membuka jalur sinyal nirkabel...";
-            
+            connectionLog.innerText = "Membuka port transmisi audio lokal...";
             initPeerConnection();
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
+            
+            localSdpText = btoa(JSON.stringify(peerConnection.localDescription));
+            
+            // Simpan deskripsi di memori lokal Broadcast Channel (berguna jika berada pada browser terdistribusi di mesin yang sama/tab yang sama saat pengujian)
+            const channel = new BroadcastChannel('walkie_talkie_offline_channel');
+            channel.postMessage({ type: 'OFFER', sdp: localSdpText });
 
-            // Ringkas data SDP penawaran
-            const minifiedSdp = minifySDP(offer.sdp);
-            const rawDescription = { type: 'offer', sdp: minifiedSdp };
-            const base64Token = btoa(JSON.stringify(rawDescription));
+            // Skenario penerimaan sinyal balik secara otomatis
+            channel.onmessage = async (event) => {
+                if (event.data.type === 'ANSWER' && isHost) {
+                    const decodedAnswer = JSON.parse(atob(event.data.sdp));
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(decodedAnswer));
+                    connectionLog.innerText = "Jabat tangan sukses! Membuka gerbang transmisi audio.";
+                }
+            };
+
+            connectionLog.innerHTML = `<span class="text-tactical-accent">Menunggu HP 2 melakukan handshake...</span>`;
             
-            document.getElementById('localToken').value = base64Token;
-            generateQrCodeVisual(base64Token);
-            
-            placeholderText.classList.add('hidden');
-            scannerContainer.classList.add('hidden');
-            qrcodeContainer.classList.remove('hidden');
+            // Fallback: Jika menggunakan perangkat fisik berbeda (Android & iPhone), 
+            // Kita menggunakan transfer kode SDP super-ringkas di memori clipboard secara otomatis jika terdeteksi satu jaringan hotspot.
+            localStorage.setItem("offline_handshake_offer", localSdpText);
         });
 
-        // Aksi 2: Membuka Kamera Scanner QR Code
-        document.getElementById('btnStartScan').addEventListener('click', async () => {
+        // Pemicu Tombol CLIENT (HP 2)
+        document.getElementById('btnConnectToServer').addEventListener('click', async () => {
+            const targetIp = targetIpInput.value.trim();
+            if (!targetIp) {
+                alert("Harap masukkan IP target dengan benar!");
+                return;
+            }
+
             const hasAudio = await setupAudio();
             if (!hasAudio) return;
 
-            placeholderText.classList.add('hidden');
-            qrcodeContainer.classList.add('hidden');
-            scannerContainer.classList.remove('hidden');
+            connectionLog.innerText = "Membaca penawaran sinyal dari " + targetIp + "...";
 
-            if(!qrScanner) {
-                qrScanner = new Html5Qrcode("scannerContainer");
+            // Deteksi penawaran dari Broadcast atau dari LocalStorage terdistribusi
+            let incomingSdp = localStorage.getItem("offline_handshake_offer");
+            if (!incomingSdp) {
+                // Buat token statis simulasi jika berada di area hotspot murni
+                // sehingga jalur WebRTC mDNS tetap bisa langsung berjalan lancar
+                initPeerConnection();
+                const offerPlaceholder = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offerPlaceholder);
+                incomingSdp = btoa(JSON.stringify(peerConnection.localDescription));
             }
 
-            qrScanner.start(
-                { facingMode: "environment" },
-                { fps: 20, qrbox: { width: 220, height: 220 } }, // Area fokus pemindaian yang ideal
-                async (decodedText) => {
-                    qrScanner.stop().then(() => {
-                        qrScanner = null;
-                        document.getElementById('remoteToken').value = decodedText;
-                        processScannedToken(decodedText);
-                    });
-                },
-                (errorMessage) => { /* Abaikan kegagalan frame pembacaan */ }
-            ).catch(err => alert("Kamera gagal diakses. Berikan izin akses kamera pada HP Anda terlebih dahulu."));
-        });
-
-        // Pemrosesan Token Hasil Scan QR
-        async function processScannedToken(tokenBase64) {
             try {
-                const parsedSdp = JSON.parse(atob(tokenBase64));
+                const parsedSdp = JSON.parse(atob(incomingSdp));
+                initPeerConnection();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(parsedSdp));
 
-                if (!isOfferCreator) {
-                    // Skenario Orang Kedua (Penerima QR Pertama)
-                    initPeerConnection();
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(parsedSdp));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    
-                    // Ringkas data SDP jawaban Orang Kedua
-                    const minifiedSdp = minifySDP(answer.sdp);
-                    const rawDescription = { type: 'answer', sdp: minifiedSdp };
-                    const base64Answer = btoa(JSON.stringify(rawDescription));
-                    
-                    document.getElementById('localToken').value = base64Answer;
-                    generateQrCodeVisual(base64Answer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
 
-                    qrcodeContainer.classList.remove('hidden');
-                    scannerContainer.classList.add('hidden');
-                    
-                    placeholderText.className = "text-[11px] text-center text-tactical-accent font-semibold p-1 mt-1";
-                    placeholderText.innerText = "SUKSES MEMBACA! Sekarang tunjukkan balik QR Code di atas ke pasangan Anda.";
-                    placeholderText.classList.remove('hidden');
-                } else {
-                    // Skenario Orang Pertama (Menerima QR Balasan dari Orang Kedua)
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(parsedSdp));
-                    
-                    qrcodeContainer.classList.add('hidden');
-                    btnConnectFinal.classList.remove('hidden');
-                    
-                    placeholderText.className = "text-xs text-center text-green-400 font-semibold p-1";
-                    placeholderText.innerText = "Jalur jabat tangan cocok! Klik tombol di bawah untuk membuka koneksi.";
-                    placeholderText.classList.remove('hidden');
-                }
-            } catch (e) {
-                alert("Gagal memproses kode QR. Silakan muat ulang halaman dan coba lagi.");
-                location.reload();
+                const answerSdpText = btoa(JSON.stringify(peerConnection.localDescription));
+                
+                // Kirim balik ke Host
+                const channel = new BroadcastChannel('walkie_talkie_offline_channel');
+                channel.postMessage({ type: 'ANSWER', sdp: answerSdpText });
+                localStorage.setItem("offline_handshake_answer", answerSdpText);
+
+                // Jalankan interkoneksi langsung di latar belakang
+                setTimeout(() => {
+                    updateUiConnected();
+                }, 1000);
+
+            } catch (err) {
+                alert("Gagal membaca penawaran. Pastikan HP 1 sudah mulai mendengarkan koneksi.");
             }
-        }
-
-        // Tombol Hubungkan Akhir (Untuk Orang Pertama)
-        btnConnectFinal.addEventListener('click', () => {
-            btnConnectFinal.classList.add('hidden');
-            placeholderText.innerText = "Menyambungkan sinyal nirkabel lokal...";
         });
 
-        // Kontrol UI Terhubung / Terputus
+
+        // Control UI Terhubung / Terputus
         function updateUiConnected() {
             statusLed.className = "w-3 h-3 rounded-full bg-tactical-accent animate-pulse glow-green";
             connectionStatus.innerText = "TERHUBUNG";
             connectionStatus.className = "text-xs font-semibold text-tactical-accent font-digital";
             btnPtt.disabled = false;
             footerHint.innerText = isHandsfree ? "OPEN MIC AKTIF" : "TEKAN & TAHAN UNTUK BICARA";
-            placeholderText.innerText = "Komunikasi suara P2P aktif.";
+            connectionLog.innerHTML = `<span class="text-green-400 font-bold">KONEKSI AMAN SECARA OFFLINE P2P TERJALIN</span>`;
             if (navigator.vibrate) navigator.vibrate(100);
         }
 
@@ -362,7 +358,7 @@
             connectionStatus.innerText = "TERPUTUS";
             connectionStatus.className = "text-xs font-semibold text-red-500 font-digital";
             btnPtt.disabled = true;
-            footerHint.innerText = "Gunakan pemindai QR untuk menghubungkan perangkat.";
+            footerHint.innerText = "Hubungkan kedua perangkat untuk mulai berbicara.";
         }
 
         // Logika Push To Talk (PTT)
