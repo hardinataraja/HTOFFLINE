@@ -84,7 +84,7 @@
 
                 <div class="flex-1 min-h-[180px] bg-black/40 rounded-xl border border-tactical-800 flex flex-col items-center justify-center p-2 relative overflow-hidden">
                     
-                    <div id="qrcodeContainer" class="hidden p-2 bg-white rounded-lg"></div>
+                    <div id="qrcodeContainer" class="hidden p-2 bg-white rounded-lg shadow-inner"></div>
                     
                     <div id="scannerContainer" class="hidden w-full h-full rounded-lg overflow-hidden"></div>
                     
@@ -96,7 +96,7 @@
                 <input type="hidden" id="localToken">
                 <input type="hidden" id="remoteToken">
 
-                <button id="btnConnectFinal" class="hidden w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-2 rounded-xl text-xs font-digital transition-all">
+                <button id="btnConnectFinal" class="hidden w-full bg-tactical-accent hover:bg-green-400 text-tactical-900 font-bold py-3 rounded-xl text-xs font-digital transition-all shadow-lg">
                     SAMBUNGKAN KONEKSI (FINAL)
                 </button>
             </div>
@@ -131,7 +131,7 @@
         let localStream, peerConnection, isHandsfree = false, isTransmitting = false;
         let audioContext, analyser, dataArray, animationId;
         let qrScanner = null;
-        let isOfferCreator = false; // Penanda siapa pembuat kode pertama
+        let isOfferCreator = false;
 
         const peerConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -176,46 +176,60 @@
                 }
             };
 
-            // Kunci utama: Generate QR Code HANYA setelah semua kandidat lokal terkumpul
-            peerConnection.onicegatheringstatechange = () => {
-                if (peerConnection.iceGatheringState === 'complete') {
-                    const base64Token = btoa(JSON.stringify(peerConnection.localDescription));
-                    document.getElementById('localToken').value = base64Token;
-                    
-                    // Render Teks Token Menjadi QR Code
-                    qrcodeContainer.innerHTML = "";
-                    new QRCode(qrcodeContainer, {
-                        text: base64Token,
-                        width: 170,
-                        height: 170
-                    });
-                    
-                    placeholderText.classList.add('hidden');
-                    scannerContainer.classList.add('hidden');
-                    qrcodeContainer.classList.remove('hidden');
+            // Menangkap kandidat ICE baru jika ada pembaruan jalur secara real-time
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && peerConnection.localDescription) {
+                    const updatedToken = btoa(JSON.stringify(peerConnection.localDescription));
+                    document.getElementById('localToken').value = updatedToken;
+                    // Hanya update visual QR jika container sedang aktif terlihat
+                    if (!qrcodeContainer.classList.contains('hidden')) {
+                        generateQrCodeVisual(updatedToken);
+                    }
                 }
             };
 
             peerConnection.onconnectionstatechange = () => {
                 if (peerConnection.connectionState === 'connected') updateUiConnected();
-                if (peerConnection.connectionState === 'disconnected') updateUiDisconnected();
+                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') updateUiDisconnected();
             };
         }
 
-        // AKSI 1: Membuat Undangan (Offer) berbentuk QR Code
+        // Helper untuk membuat QR Code ke layar
+        function generateQrCodeVisual(textData) {
+            qrcodeContainer.innerHTML = "";
+            new QRCode(qrcodeContainer, {
+                text: textData,
+                width: 170,
+                height: 170,
+                correctLevel: QRCode.CorrectLevel.L // Gunakan level low agar densitas kotak tidak terlalu rapat dan mudah di-scan HP lain
+            });
+        }
+
+        // PERBAIKAN UTAMA: Aksi 1 - Membuat Undangan (Offer) QR secara INSTAN
         document.getElementById('btnInitOffer').addEventListener('click', async () => {
             const hasAudio = await setupAudio();
             if (!hasAudio) return;
 
             isOfferCreator = true;
-            placeholderText.innerText = "Sedang merajut jalur lokal... mohon tunggu...";
+            placeholderText.innerText = "Membuat QR Code Jalur Lokal...";
+            
             initPeerConnection();
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
+
+            // Langsung eksekusi pembuatan QR Code tanpa menunggu proses sinkronisasi eksternal selesai
+            const base64Token = btoa(JSON.stringify(peerConnection.localDescription));
+            document.getElementById('localToken').value = base64Token;
+            
+            generateQrCodeVisual(base64Token);
+            
+            placeholderText.classList.add('hidden');
+            scannerContainer.classList.add('hidden');
+            qrcodeContainer.classList.remove('hidden');
         });
 
-        // AKSI 2: Membuka Kamera Scanner QR Code
+        // Aksi 2: Membuka Kamera Scanner QR Code
         document.getElementById('btnStartScan').addEventListener('click', async () => {
             const hasAudio = await setupAudio();
             if (!hasAudio) return;
@@ -230,14 +244,15 @@
 
             qrScanner.start(
                 { facingMode: "environment" },
-                { fps: 10, qrbox: 180 },
+                { fps: 15, qrbox: 200 },
                 async (decodedText) => {
-                    // Ketika QR Code sukses dipindai
-                    qrScanner.stop();
-                    document.getElementById('remoteToken').value = decodedText;
-                    processScannedToken(decodedText);
+                    qrScanner.stop().then(() => {
+                        qrScanner = null;
+                        document.getElementById('remoteToken').value = decodedText;
+                        processScannedToken(decodedText);
+                    });
                 },
-                (errorMessage) => { /* Silently ignore scanning noise */ }
+                (errorMessage) => { /* Mengabaikan noise pencarian */ }
             ).catch(err => alert("Kamera gagal diakses: " + err));
         });
 
@@ -246,27 +261,37 @@
             try {
                 const parsedSdp = JSON.parse(atob(tokenBase64));
 
-                if (!isOfferCreator && !peerConnection) {
+                if (!isOfferCreator) {
                     // Skenario Orang Kedua (Penerima QR Pertama)
                     initPeerConnection();
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(parsedSdp));
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
                     
-                    // Beritahu orang kedua untuk menunjukkan kode QR balasannya ke Orang Pertama
-                    placeholderText.className = "text-xs text-center text-tactical-accent font-semibold p-2";
-                    placeholderText.innerText = "Sukses membaca undangan! Sekarang tunjukkan QR Code Anda di layar ini agar di-scan balik oleh pasangan Anda.";
+                    // Langsung generate QR balasan dari Orang Kedua untuk Orang Pertama
+                    const base64Answer = btoa(JSON.stringify(peerConnection.localDescription));
+                    document.getElementById('localToken').value = base64Answer;
+                    generateQrCodeVisual(base64Answer);
+
+                    qrcodeContainer.classList.remove('hidden');
+                    scannerContainer.classList.add('hidden');
+                    
+                    placeholderText.className = "text-[11px] text-center text-tactical-accent font-semibold p-1 mt-1";
+                    placeholderText.innerText = "SUKSES MEMBACA! Sekarang arahkan balik QR Code di atas ke kamera pasangan Anda.";
                     placeholderText.classList.remove('hidden');
                 } else {
                     // Skenario Orang Pertama (Menerima QR Balasan dari Orang Kedua)
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(parsedSdp));
+                    
+                    qrcodeContainer.classList.add('hidden');
                     btnConnectFinal.classList.remove('hidden');
-                    placeholderText.className = "text-xs text-center text-green-400 font-semibold";
-                    placeholderText.innerText = "Jalur jabat tangan cocok! Klik tombol di bawah untuk menyambungkan suara.";
+                    
+                    placeholderText.className = "text-xs text-center text-green-400 font-semibold p-1";
+                    placeholderText.innerText = "Jalur jabat tangan cocok! Klik tombol di bawah untuk membuka koneksi.";
                     placeholderText.classList.remove('hidden');
                 }
             } catch (e) {
-                alert("QR Code tidak cocok atau data terputus.");
+                alert("Gagal memproses kode QR. Silakan muat ulang halaman dan coba lagi.");
                 location.reload();
             }
         }
@@ -284,7 +309,7 @@
             connectionStatus.className = "text-xs font-semibold text-tactical-accent font-digital";
             btnPtt.disabled = false;
             footerHint.innerText = isHandsfree ? "OPEN MIC AKTIF" : "TEKAN & TAHAN UNTUK BICARA";
-            placeholderText.innerText = "Komunikasi terhubung secara langsung (Peer-to-Peer).";
+            placeholderText.innerText = "Komunikasi suara P2P aktif.";
             if (navigator.vibrate) navigator.vibrate(100);
         }
 
@@ -303,14 +328,14 @@
         setTimeout(() => setMuteState(true), 1000);
 
         function startTransmission() {
-            if (isTransmitting) return;
+            if (isTransmitting || btnPtt.disabled) return;
             isTransmitting = true;
             setMuteState(false);
             btnPtt.classList.add('ptt-active');
             pttPing.classList.add('animate-ping', 'opacity-100');
             pttText.innerText = "ON AIR";
-            pttText.classList.add('text-red-500');
-            pttMicIcon.classList.add('text-red-500');
+            pttText.className = "text-[9px] font-digital font-bold text-red-500 tracking-wider";
+            pttMicIcon.className = "w-8 h-8 text-red-500 mb-1";
             if (navigator.vibrate) navigator.vibrate(40);
         }
 
@@ -321,8 +346,8 @@
             btnPtt.classList.remove('ptt-active');
             pttPing.classList.remove('animate-ping', 'opacity-100');
             pttText.innerText = "TALK LOCK";
-            pttText.classList.remove('text-red-500');
-            pttMicIcon.classList.remove('text-red-500');
+            pttText.className = "text-[9px] font-digital font-bold text-tactical-accent tracking-wider";
+            pttMicIcon.className = "w-8 h-8 text-tactical-accent mb-1";
         }
 
         // PTT Event Listeners
@@ -333,6 +358,7 @@
 
         // Handsfree Mode Toggle
         btnHandsfree.addEventListener('click', () => {
+            if(btnPtt.disabled) return;
             isHandsfree = !isHandsfree;
             if (isHandsfree) {
                 btnHandsfree.classList.replace('bg-tactical-700', 'bg-tactical-accent');
