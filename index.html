@@ -74,7 +74,6 @@
         .message-author { font-size: 12px; font-weight: 600; color: #e94560; }
         .message-time { font-size: 10px; color: #8b8b9e; white-space: nowrap; }
         .message-text { font-size: 13px; line-height: 1.4; color: #e0e0e0; word-break: break-word; }
-        .message-voice { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 0; }
         .message-own { flex-direction: row-reverse; align-self: flex-end; }
         .message-own .message-content { background: linear-gradient(135deg, #e94560, #c0392b); border-top-left-radius: 14px; border-top-right-radius: 4px; }
         .message-own .message-author { color: #ffcccc; }
@@ -119,8 +118,6 @@
         .modal h3 { margin-bottom: 12px; font-size: 16px; }
         .modal p { color: #8b8b9e; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
         
-        #audioContainer { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
-        
         .exit-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 8px; color: #e74c3c; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 50; }
         
         @media (max-width: 380px) { .ptt-button { width: 85px; height: 85px; font-size: 30px; } }
@@ -130,8 +127,6 @@
     </style>
 </head>
 <body>
-
-    <div id="audioContainer"></div>
 
     <div class="header">
         <div class="logo">
@@ -289,6 +284,7 @@
         // ==================== STATE ====================
         let localStream = null;
         let mediaRecorder = null;
+        let audioChunks = [];
         let isRecording = false;
         let isHandsfree = false;
         let peers = new Map();
@@ -356,11 +352,6 @@
                     } 
                 });
                 
-                // MUTE by default
-                localStream.getAudioTracks().forEach(track => {
-                    track.enabled = false;
-                });
-                
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 const source = audioContext.createMediaStreamSource(localStream);
@@ -371,18 +362,6 @@
             } catch (err) {
                 showToast('Izin mikrofon ditolak! ' + err.message, '❌');
                 return false;
-            }
-        }
-
-        function enableMic() {
-            if (localStream) {
-                localStream.getAudioTracks().forEach(track => track.enabled = true);
-            }
-        }
-
-        function disableMic() {
-            if (localStream) {
-                localStream.getAudioTracks().forEach(track => track.enabled = false);
             }
         }
 
@@ -405,23 +384,13 @@
 
         // ==================== CLEANUP ====================
         function cleanupAll() {
-            if (isRecording) {
-                isRecording = false;
-                disableMic();
-                stopVolumeMeter();
+            if (isRecording && mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
             }
+            isRecording = false;
             
-            peers.forEach((peer, peerId) => {
-                if (peer.audioElement) {
-                    peer.audioElement.pause();
-                    peer.audioElement.srcObject = null;
-                    peer.audioElement.remove();
-                }
-                if (peer.pc) {
-                    peer.pc.ontrack = null;
-                    peer.pc.onicecandidate = null;
-                    peer.pc.close();
-                }
+            peers.forEach((peer) => {
+                if (peer.pc) peer.pc.close();
             });
             peers.clear();
             
@@ -508,10 +477,10 @@
                         }
                     };
                     
-                    ws.onerror = (err) => {
+                    ws.onerror = () => {
                         showToast('Gagal konek ke server!', '❌');
                         updateStatus('offline');
-                        reject(err);
+                        reject();
                     };
                     
                     ws.onclose = () => {
@@ -563,43 +532,7 @@
             
             const pc = new RTCPeerConnection(config);
             
-            // Add muted tracks
-            if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    pc.addTrack(track, localStream);
-                });
-            }
-            
-            pc.ontrack = (event) => {
-                const remoteStream = event.streams[0];
-                
-                // Prevent duplicate audio elements
-                const existing = document.getElementById('audio-peer-' + peerId);
-                if (existing) existing.remove();
-                
-                const audioEl = document.createElement('audio');
-                audioEl.id = 'audio-peer-' + peerId;
-                audioEl.srcObject = remoteStream;
-                audioEl.autoplay = true;
-                audioEl.playsInline = true;
-                audioEl.setAttribute('playsinline', '');
-                audioEl.muted = false;
-                audioEl.volume = 1.0;
-                
-                document.getElementById('audioContainer').appendChild(audioEl);
-                
-                audioEl.play().catch(err => {
-                    console.log('Autoplay blocked:', err);
-                });
-                
-                const peer = peers.get(peerId);
-                if (peer) {
-                    peer.audioElement = audioEl;
-                    peer.remoteStream = remoteStream;
-                }
-                
-                showToast('Audio peer terhubung!', '🔊');
-            };
+            // NO AUDIO TRACK - we use DataChannel for audio
             
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
@@ -632,9 +565,7 @@
                 pc: pc,
                 dc: null,
                 name: 'Peer',
-                id: peerId,
-                audioElement: null,
-                remoteStream: null
+                id: peerId
             };
             peers.set(peerId, peerData);
             
@@ -673,7 +604,10 @@
                     const data = JSON.parse(event.data);
                     handleDcMessage(data, peerId);
                 } catch (e) {
-                    // Ignore binary data - we use WebRTC track for audio
+                    // Binary audio data
+                    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+                        playAudioChunk(event.data, peerId);
+                    }
                 }
             };
         }
@@ -727,7 +661,7 @@
                     break;
                     
                 case 'text':
-                    addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false, false);
+                    addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false);
                     break;
                     
                 case 'speaking':
@@ -847,10 +781,6 @@
         function removePeer(peerId) {
             const peer = peers.get(peerId);
             if (peer) {
-                if (peer.audioElement) {
-                    peer.audioElement.pause();
-                    peer.audioElement.remove();
-                }
                 if (peer.pc) peer.pc.close();
                 peers.delete(peerId);
                 
@@ -861,7 +791,7 @@
             }
         }
 
-        // ==================== PTT ====================
+        // ==================== PTT & AUDIO ====================
         function toggleHandsfree() {
             isHandsfree = !isHandsfree;
             const toggle = document.getElementById('handsfreeToggle');
@@ -905,11 +835,49 @@
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
-            // ENABLE MIC - WebRTC track will stream automatically
-            enableMic();
-            
             startVolumeMeter();
             broadcastToPeers({ type: 'speaking', id: myId });
+            
+            if (!localStream) {
+                const success = await initAudio();
+                if (!success) {
+                    stopTalking();
+                    return;
+                }
+            }
+            
+            try {
+                const options = { mimeType: 'audio/webm;codecs=opus' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options.mimeType = 'audio/webm';
+                }
+                
+                mediaRecorder = new MediaRecorder(localStream, options);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        // Stream chunks in real-time
+                        sendAudioChunkToPeers(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    // Send any remaining chunks
+                    if (audioChunks.length > 0) {
+                        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                        sendAudioBlobToPeers(blob);
+                    }
+                    addMessageToChat(myName, '🎙️ Voice message', true);
+                };
+                
+                // Collect every 100ms for near real-time
+                mediaRecorder.start(100);
+            } catch (err) {
+                showToast('Gagal merekam: ' + err.message, '❌');
+                stopTalking();
+            }
         }
 
         function stopTalking() {
@@ -921,11 +889,79 @@
             document.getElementById('selfWave').style.display = 'none';
             highlightMember(myId, false);
             
-            // DISABLE MIC - WebRTC track stops streaming
-            disableMic();
-            
             stopVolumeMeter();
             broadcastToPeers({ type: 'stopped', id: myId });
+            
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        function sendAudioChunkToPeers(chunk) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const arrayBuffer = reader.result;
+                peers.forEach((peer) => {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(arrayBuffer);
+                    }
+                });
+            };
+            reader.readAsArrayBuffer(chunk);
+        }
+
+        function sendAudioBlobToPeers(blob) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const arrayBuffer = reader.result;
+                peers.forEach((peer) => {
+                    if (peer.dc && peer.dc.readyState === 'open') {
+                        peer.dc.send(arrayBuffer);
+                    }
+                });
+            };
+            reader.readAsArrayBuffer(blob);
+        }
+
+        let audioBuffers = new Map();
+
+        function playAudioChunk(data, peerId) {
+            // Accumulate chunks and play as continuous stream
+            if (!audioBuffers.has(peerId)) {
+                audioBuffers.set(peerId, []);
+            }
+            audioBuffers.get(peerId).push(data);
+            
+            // Clear previous timeout
+            if (window['audioTimeout_' + peerId]) {
+                clearTimeout(window['audioTimeout_' + peerId]);
+            }
+            
+            // Play after short delay to accumulate chunks
+            window['audioTimeout_' + peerId] = setTimeout(() => {
+                const chunks = audioBuffers.get(peerId);
+                audioBuffers.set(peerId, []);
+                
+                if (chunks.length === 0) return;
+                
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audio.volume = 1.0;
+                
+                audio.play().then(() => {
+                    const peer = peers.get(peerId);
+                    if (peer) {
+                        addMessageToChat(peer.name, '🎙️ Voice', false);
+                    }
+                }).catch((err) => {
+                    console.log('Audio play failed:', err);
+                });
+                
+                audio.onended = () => {
+                    URL.revokeObjectURL(url);
+                };
+            }, 200);
         }
 
         function broadcastToPeers(data) {
@@ -954,7 +990,7 @@
             
             sendWs({ type: 'broadcast', payload: msg });
             
-            addMessageToChat(myName, text, true, false);
+            addMessageToChat(myName, text, true);
             input.value = '';
         }
 
