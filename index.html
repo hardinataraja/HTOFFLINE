@@ -7,795 +7,130 @@
     <meta name="theme-color" content="#1a1a2e">
     <title>WalkieTalkie - Offline P2P</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f1e;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            padding: 12px 16px;
-            border-bottom: 1px solid #2a2a4a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 10;
-            flex-shrink: 0;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .logo-icon {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, #e94560, #ff6b6b);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .logo-text h1 {
-            font-size: 16px;
-            font-weight: 700;
-            letter-spacing: -0.3px;
-        }
-
-        .logo-text p {
-            font-size: 10px;
-            color: #8b8b9e;
-        }
-
-        .status-badge {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .status-online {
-            background: rgba(46, 204, 113, 0.15);
-            color: #2ecc71;
-            border: 1px solid rgba(46, 204, 113, 0.3);
-        }
-
-        .status-offline {
-            background: rgba(231, 76, 60, 0.15);
-            color: #e74c3c;
-            border: 1px solid rgba(231, 76, 60, 0.3);
-        }
-
-        .status-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-
-        /* Main Content */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Setup Screen */
-        .setup-screen {
-            position: absolute;
-            inset: 0;
-            background: #0f0f1e;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            z-index: 100;
-            transition: opacity 0.3s;
-        }
-
-        .setup-screen.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .setup-card {
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 20px;
-            padding: 24px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
-
-        .setup-card h2 {
-            font-size: 20px;
-            margin-bottom: 6px;
-        }
-
-        .setup-card .subtitle {
-            color: #8b8b9e;
-            font-size: 13px;
-            margin-bottom: 20px;
-        }
-
-        .name-input {
-            width: 100%;
-            padding: 12px 14px;
-            background: #0f0f1e;
-            border: 2px solid #2a2a4a;
-            border-radius: 12px;
-            color: #fff;
-            font-size: 15px;
-            margin-bottom: 12px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .name-input:focus {
-            border-color: #e94560;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
-            margin-bottom: 8px;
-        }
-
-        .btn:active {
-            transform: scale(0.97);
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #e94560, #ff6b6b);
-            color: #fff;
-        }
-
-        .btn-secondary {
-            background: #2a2a4a;
-            color: #fff;
-        }
-
-        .btn-outline {
-            background: transparent;
-            border: 2px solid #e94560;
-            color: #e94560;
-        }
-
-        .divider {
-            margin: 16px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #8b8b9e;
-            font-size: 12px;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: #2a2a4a;
-        }
-
-        .qr-section {
-            margin-top: 12px;
-        }
-
-        #qrcode {
-            margin: 12px auto;
-            padding: 10px;
-            background: #fff;
-            border-radius: 10px;
-            width: fit-content;
-        }
-
-        .join-code {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .join-code input {
-            flex: 1;
-            padding: 10px;
-            background: #0f0f1e;
-            border: 2px solid #2a2a4a;
-            border-radius: 10px;
-            color: #fff;
-            font-size: 13px;
-            text-align: center;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        /* Channel Info */
-        .channel-bar {
-            background: #1a1a2e;
-            padding: 10px 14px;
-            border-bottom: 1px solid #2a2a4a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .channel-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .channel-icon {
-            width: 28px;
-            height: 28px;
-            background: #e94560;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-        }
-
-        .channel-details h3 {
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-        .channel-details p {
-            font-size: 10px;
-            color: #8b8b9e;
-        }
-
-        .member-count {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 12px;
-            color: #8b8b9e;
-        }
-
-        /* Members List */
-        .members-panel {
-            background: #1a1a2e;
-            border-bottom: 1px solid #2a2a4a;
-            padding: 10px 14px;
-            overflow-x: auto;
-            white-space: nowrap;
-            -webkit-overflow-scrolling: touch;
-            flex-shrink: 0;
-        }
-
-        .members-panel::-webkit-scrollbar {
-            display: none;
-        }
-
-        .member-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            padding: 5px 10px;
-            background: #0f0f1e;
-            border: 1px solid #2a2a4a;
-            border-radius: 20px;
-            margin-right: 6px;
-            font-size: 12px;
-            transition: all 0.3s;
-        }
-
-        .member-chip.speaking {
-            border-color: #e94560;
-            background: rgba(233, 69, 96, 0.15);
-            box-shadow: 0 0 12px rgba(233, 69, 96, 0.3);
-        }
-
-        .member-avatar {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .member-chip.speaking .member-avatar {
-            animation: speaking-pulse 0.5s infinite alternate;
-        }
-
-        @keyframes speaking-pulse {
-            from { transform: scale(1); }
-            to { transform: scale(1.15); }
-        }
-
-        .sound-wave {
-            display: flex;
-            gap: 2px;
-            align-items: center;
-            height: 10px;
-        }
-
-        .wave-bar {
-            width: 2px;
-            background: #e94560;
-            border-radius: 1px;
-            animation: wave 0.5s infinite ease-in-out;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f1e; color: #fff; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        
+        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 12px 16px; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-shrink: 0; }
+        .logo { display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #e94560, #ff6b6b); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .logo-text h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+        .logo-text p { font-size: 10px; color: #8b8b9e; }
+        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .status-online { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .status-offline { background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3); }
+        .status-connecting { background: rgba(241, 196, 15, 0.15); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.3); }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        
+        .setup-screen { position: absolute; inset: 0; background: #0f0f1e; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; z-index: 100; transition: opacity 0.3s; }
+        .setup-screen.hidden { opacity: 0; pointer-events: none; }
+        .setup-card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 20px; padding: 24px; width: 100%; max-width: 400px; text-align: center; }
+        .setup-card h2 { font-size: 20px; margin-bottom: 6px; }
+        .setup-card .subtitle { color: #8b8b9e; font-size: 13px; margin-bottom: 20px; }
+        .name-input { width: 100%; padding: 12px 14px; background: #0f0f1e; border: 2px solid #2a2a4a; border-radius: 12px; color: #fff; font-size: 15px; margin-bottom: 12px; outline: none; transition: border-color 0.2s; }
+        .name-input:focus { border-color: #e94560; }
+        .server-input { width: 100%; padding: 10px 12px; background: #0f0f1e; border: 2px solid #2a2a4a; border-radius: 10px; color: #fff; font-size: 12px; margin-bottom: 8px; outline: none; font-family: monospace; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.1s, opacity 0.2s; margin-bottom: 8px; }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: linear-gradient(135deg, #e94560, #ff6b6b); color: #fff; }
+        .btn-secondary { background: #2a2a4a; color: #fff; }
+        .btn-outline { background: transparent; border: 2px solid #e94560; color: #e94560; }
+        .divider { margin: 16px 0; display: flex; align-items: center; gap: 10px; color: #8b8b9e; font-size: 12px; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #2a2a4a; }
+        
+        #qrcode { margin: 12px auto; padding: 10px; background: #fff; border-radius: 10px; width: fit-content; }
+        .join-code { display: flex; gap: 8px; margin-top: 10px; }
+        .join-code input { flex: 1; padding: 10px; background: #0f0f1e; border: 2px solid #2a2a4a; border-radius: 10px; color: #fff; font-size: 13px; text-align: center; letter-spacing: 2px; text-transform: uppercase; }
+        
+        .channel-bar { background: #1a1a2e; padding: 10px 14px; border-bottom: 1px solid #2a2a4a; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .channel-info { display: flex; align-items: center; gap: 8px; }
+        .channel-icon { width: 28px; height: 28px; background: #e94560; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .channel-details h3 { font-size: 13px; font-weight: 600; }
+        .channel-details p { font-size: 10px; color: #8b8b9e; }
+        .member-count { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8b8b9e; }
+        
+        .members-panel { background: #1a1a2e; border-bottom: 1px solid #2a2a4a; padding: 10px 14px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; flex-shrink: 0; }
+        .members-panel::-webkit-scrollbar { display: none; }
+        .member-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 20px; margin-right: 6px; font-size: 12px; transition: all 0.3s; }
+        .member-chip.speaking { border-color: #e94560; background: rgba(233, 69, 96, 0.15); box-shadow: 0 0 12px rgba(233, 69, 96, 0.3); }
+        .member-avatar { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+        .member-chip.speaking .member-avatar { animation: speaking-pulse 0.5s infinite alternate; }
+        @keyframes speaking-pulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+        .sound-wave { display: flex; gap: 2px; align-items: center; height: 10px; }
+        .wave-bar { width: 2px; background: #e94560; border-radius: 1px; animation: wave 0.5s infinite ease-in-out; }
         .wave-bar:nth-child(1) { height: 3px; animation-delay: 0s; }
         .wave-bar:nth-child(2) { height: 7px; animation-delay: 0.1s; }
         .wave-bar:nth-child(3) { height: 5px; animation-delay: 0.2s; }
-
-        @keyframes wave {
-            0%, 100% { transform: scaleY(0.5); }
-            50% { transform: scaleY(1); }
-        }
-
-        /* Messages Area */
-        .messages-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .message {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            animation: slideIn 0.3s ease;
-            max-width: 85%;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
-            flex-shrink: 0;
-        }
-
-        .message-content {
-            flex: 1;
-            background: #1a1a2e;
-            padding: 8px 12px;
-            border-radius: 14px;
-            border-top-left-radius: 4px;
-        }
-
-        .message-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 3px;
-            gap: 8px;
-        }
-
-        .message-author {
-            font-size: 12px;
-            font-weight: 600;
-            color: #e94560;
-        }
-
-        .message-time {
-            font-size: 10px;
-            color: #8b8b9e;
-            white-space: nowrap;
-        }
-
-        .message-text {
-            font-size: 13px;
-            line-height: 1.4;
-            color: #e0e0e0;
-            word-break: break-word;
-        }
-
-        .message-voice {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 4px;
-            padding: 4px 0;
-        }
-
-        .voice-play-btn {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: rgba(233, 69, 96, 0.2);
-            border: none;
-            color: #e94560;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .voice-duration {
-            font-size: 11px;
-            color: #8b8b9e;
-        }
-
-        .message-own {
-            flex-direction: row-reverse;
-            align-self: flex-end;
-        }
-
-        .message-own .message-content {
-            background: linear-gradient(135deg, #e94560, #c0392b);
-            border-top-left-radius: 14px;
-            border-top-right-radius: 4px;
-        }
-
-        .message-own .message-author {
-            color: #ffcccc;
-        }
-
-        .message-own .message-text {
-            color: #fff;
-        }
-
-        /* Input Area */
-        .input-area {
-            padding: 10px 12px;
-            background: #1a1a2e;
-            border-top: 1px solid #2a2a4a;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .text-input {
-            flex: 1;
-            padding: 10px 14px;
-            background: #0f0f1e;
-            border: 1px solid #2a2a4a;
-            border-radius: 20px;
-            color: #fff;
-            font-size: 14px;
-            outline: none;
-        }
-
-        .text-input:focus {
-            border-color: #e94560;
-        }
-
-        .send-btn {
-            width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #e94560, #ff6b6b);
-            border: none;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
-        /* PTT Section */
-        .ptt-section {
-            padding: 12px;
-            background: linear-gradient(to top, #0f0f1e 0%, transparent 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        .ptt-controls {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            width: 100%;
-            justify-content: center;
-        }
-
-        .handsfree-toggle {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 20px;
-            font-size: 12px;
-            color: #8b8b9e;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .handsfree-toggle.active {
-            background: rgba(233, 69, 96, 0.15);
-            border-color: #e94560;
-            color: #e94560;
-        }
-
-        .handsfree-toggle .toggle-switch {
-            width: 36px;
-            height: 20px;
-            background: #2a2a4a;
-            border-radius: 10px;
-            position: relative;
-            transition: background 0.2s;
-        }
-
-        .handsfree-toggle.active .toggle-switch {
-            background: #e94560;
-        }
-
-        .handsfree-toggle .toggle-switch::after {
-            content: '';
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            background: #fff;
-            border-radius: 50%;
-            top: 2px;
-            left: 2px;
-            transition: transform 0.2s;
-        }
-
-        .handsfree-toggle.active .toggle-switch::after {
-            transform: translateX(16px);
-        }
-
-        .ptt-button {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            border: none;
-            background: linear-gradient(135deg, #e94560, #c0392b);
-            color: #fff;
-            font-size: 36px;
-            cursor: pointer;
-            box-shadow: 0 6px 24px rgba(233, 69, 96, 0.4);
-            transition: all 0.1s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            flex-shrink: 0;
-        }
-
-        .ptt-button:active, .ptt-button.recording {
-            transform: scale(0.95);
-            box-shadow: 0 3px 12px rgba(233, 69, 96, 0.6);
-            background: linear-gradient(135deg, #c0392b, #e94560);
-        }
-
-        .ptt-button.locked {
-            background: linear-gradient(135deg, #27ae60, #2ecc71);
-            box-shadow: 0 6px 24px rgba(46, 204, 113, 0.4);
-        }
-
-        .ptt-button::before {
-            content: '';
-            position: absolute;
-            inset: -3px;
-            border-radius: 50%;
-            border: 2px solid rgba(233, 69, 96, 0.3);
-            animation: ripple 2s infinite;
-        }
-
-        .ptt-button.recording::before {
-            animation: ripple 0.5s infinite;
-            border-color: rgba(233, 69, 96, 0.6);
-        }
-
-        .ptt-button.locked::before {
-            border-color: rgba(46, 204, 113, 0.3);
-            animation: ripple 2s infinite;
-        }
-
-        .ptt-button.locked.recording::before {
-            animation: ripple 0.5s infinite;
-            border-color: rgba(46, 204, 113, 0.6);
-        }
-
-        @keyframes ripple {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.3); opacity: 0; }
-        }
-
-        .ptt-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: #8b8b9e;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .ptt-status {
-            font-size: 11px;
-            color: #e94560;
-            height: 16px;
-            font-weight: 500;
-        }
-
-        /* Volume Meter */
-        .volume-meter {
-            width: 160px;
-            height: 3px;
-            background: #2a2a4a;
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .volume-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #2ecc71, #e94560);
-            border-radius: 2px;
-            transition: width 0.05s;
-        }
-
-        /* Toast */
-        .toast {
-            position: fixed;
-            top: 70px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-20px);
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-size: 13px;
-            z-index: 1000;
-            opacity: 0;
-            transition: all 0.3s;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        /* Modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.85);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        .modal {
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 16px;
-            padding: 20px;
-            width: 90%;
-            max-width: 380px;
-            transform: scale(0.9);
-            transition: transform 0.3s;
-        }
-
-        .modal-overlay.active .modal {
-            transform: scale(1);
-        }
-
-        .modal h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-
-        .modal p {
-            color: #8b8b9e;
-            font-size: 13px;
-            margin-bottom: 16px;
-            line-height: 1.5;
-        }
-
-        /* Audio Container (hidden but needed for autoplay) */
-        #audioContainer {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            overflow: hidden;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Responsive */
-        @media (max-width: 380px) {
-            .ptt-button {
-                width: 85px;
-                height: 85px;
-                font-size: 30px;
-            }
-        }
-
-        ::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #2a2a4a;
-            border-radius: 2px;
-        }
+        @keyframes wave { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1); } }
+        
+        .messages-area { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
+        .message { display: flex; align-items: flex-start; gap: 8px; animation: slideIn 0.3s ease; max-width: 85%; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .message-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+        .message-content { flex: 1; background: #1a1a2e; padding: 8px 12px; border-radius: 14px; border-top-left-radius: 4px; }
+        .message-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; gap: 8px; }
+        .message-author { font-size: 12px; font-weight: 600; color: #e94560; }
+        .message-time { font-size: 10px; color: #8b8b9e; white-space: nowrap; }
+        .message-text { font-size: 13px; line-height: 1.4; color: #e0e0e0; word-break: break-word; }
+        .message-voice { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 0; }
+        .message-own { flex-direction: row-reverse; align-self: flex-end; }
+        .message-own .message-content { background: linear-gradient(135deg, #e94560, #c0392b); border-top-left-radius: 14px; border-top-right-radius: 4px; }
+        .message-own .message-author { color: #ffcccc; }
+        .message-own .message-text { color: #fff; }
+        
+        .input-area { padding: 10px 12px; background: #1a1a2e; border-top: 1px solid #2a2a4a; display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+        .text-input { flex: 1; padding: 10px 14px; background: #0f0f1e; border: 1px solid #2a2a4a; border-radius: 20px; color: #fff; font-size: 14px; outline: none; }
+        .text-input:focus { border-color: #e94560; }
+        .send-btn { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #e94560, #ff6b6b); border: none; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; flex-shrink: 0; }
+        
+        .ptt-section { padding: 12px; background: linear-gradient(to top, #0f0f1e 0%, transparent 100%); display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+        .ptt-controls { display: flex; align-items: center; gap: 12px; width: 100%; justify-content: center; }
+        .handsfree-toggle { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 20px; font-size: 12px; color: #8b8b9e; cursor: pointer; transition: all 0.2s; }
+        .handsfree-toggle.active { background: rgba(233, 69, 96, 0.15); border-color: #e94560; color: #e94560; }
+        .handsfree-toggle .toggle-switch { width: 36px; height: 20px; background: #2a2a4a; border-radius: 10px; position: relative; transition: background 0.2s; }
+        .handsfree-toggle.active .toggle-switch { background: #e94560; }
+        .handsfree-toggle .toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: transform 0.2s; }
+        .handsfree-toggle.active .toggle-switch::after { transform: translateX(16px); }
+        
+        .ptt-button { width: 100px; height: 100px; border-radius: 50%; border: none; background: linear-gradient(135deg, #e94560, #c0392b); color: #fff; font-size: 36px; cursor: pointer; box-shadow: 0 6px 24px rgba(233, 69, 96, 0.4); transition: all 0.1s; display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
+        .ptt-button:active, .ptt-button.recording { transform: scale(0.95); box-shadow: 0 3px 12px rgba(233, 69, 96, 0.6); background: linear-gradient(135deg, #c0392b, #e94560); }
+        .ptt-button.locked { background: linear-gradient(135deg, #27ae60, #2ecc71); box-shadow: 0 6px 24px rgba(46, 204, 113, 0.4); }
+        .ptt-button::before { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgba(233, 69, 96, 0.3); animation: ripple 2s infinite; }
+        .ptt-button.recording::before { animation: ripple 0.5s infinite; border-color: rgba(233, 69, 96, 0.6); }
+        .ptt-button.locked::before { border-color: rgba(46, 204, 113, 0.3); }
+        .ptt-button.locked.recording::before { animation: ripple 0.5s infinite; border-color: rgba(46, 204, 113, 0.6); }
+        @keyframes ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+        
+        .ptt-label { font-size: 11px; font-weight: 600; color: #8b8b9e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .ptt-status { font-size: 11px; color: #e94560; height: 16px; font-weight: 500; }
+        
+        .volume-meter { width: 160px; height: 3px; background: #2a2a4a; border-radius: 2px; overflow: hidden; }
+        .volume-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #2ecc71, #e94560); border-radius: 2px; transition: width 0.05s; }
+        
+        .toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #1a1a2e; border: 1px solid #2a2a4a; padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 1000; opacity: 0; transition: all 0.3s; pointer-events: none; display: flex; align-items: center; gap: 6px; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 20px; width: 90%; max-width: 380px; transform: scale(0.9); transition: transform 0.3s; }
+        .modal-overlay.active .modal { transform: scale(1); }
+        .modal h3 { margin-bottom: 12px; font-size: 16px; }
+        .modal p { color: #8b8b9e; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+        
+        #audioContainer { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+        
+        @media (max-width: 380px) { .ptt-button { width: 85px; height: 85px; font-size: 30px; } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
     </style>
 </head>
 <body>
 
-    <!-- Hidden Audio Container (CRITICAL for mobile autoplay) -->
     <div id="audioContainer"></div>
 
-    <!-- Header -->
     <div class="header">
         <div class="logo">
             <div class="logo-icon">📻</div>
@@ -810,13 +145,15 @@
         </div>
     </div>
 
-    <!-- Setup Screen -->
     <div class="setup-screen" id="setupScreen">
         <div class="setup-card">
             <h2>🎙️ WalkieTalkie</h2>
-            <p class="subtitle">Komunikasi suara & teks P2P offline</p>
+            <p class="subtitle">Komunikasi suara & teks P2P</p>
             
             <input type="text" class="name-input" id="userName" placeholder="Masukkan nama kamu" maxlength="20" value="User">
+            
+            <input type="text" class="server-input" id="serverUrl" placeholder="https://server-signaling.com" value="https://walkie-signaling.onrender.com">
+            <p style="font-size: 10px; color: #8b8b9e; margin-bottom: 12px; text-align: left;">🔗 URL server signaling (Render)</p>
             
             <button class="btn btn-primary" onclick="createRoom()">
                 🚀 Buat Channel Baru
@@ -833,17 +170,15 @@
             <p style="font-size: 12px; color: #8b8b9e; line-height: 1.6; text-align: left;">
                 1. Semua device dalam <b>satu WiFi/Hotspot</b><br>
                 2. Salah satu buat channel<br>
-                3. Lainnya scan QR atau masukkan kode<br>
+                3. Lainnya masukkan kode channel<br>
                 4. Tekan & tahan PTT untuk bicara<br>
                 5. Atau aktifkan <b>Handsfree</b> untuk lock PTT
             </p>
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content" id="mainContent" style="display: none;">
         
-        <!-- Channel Bar -->
         <div class="channel-bar">
             <div class="channel-info">
                 <div class="channel-icon">📡</div>
@@ -858,7 +193,6 @@
             </div>
         </div>
 
-        <!-- Members -->
         <div class="members-panel" id="membersPanel">
             <div class="member-chip" id="selfChip">
                 <div class="member-avatar" id="selfAvatar">U</div>
@@ -871,7 +205,6 @@
             </div>
         </div>
 
-        <!-- Messages -->
         <div class="messages-area" id="messagesArea">
             <div style="text-align: center; color: #8b8b9e; padding: 30px 20px; font-size: 13px;">
                 <p>🎙️ Channel siap!</p>
@@ -879,13 +212,11 @@
             </div>
         </div>
 
-        <!-- Text Input -->
         <div class="input-area">
             <input type="text" class="text-input" id="textInput" placeholder="Ketik pesan..." maxlength="200">
             <button class="send-btn" onclick="sendTextMessage()">➤</button>
         </div>
 
-        <!-- PTT Section -->
         <div class="ptt-section">
             <div class="volume-meter">
                 <div class="volume-fill" id="volumeFill"></div>
@@ -913,11 +244,10 @@
         </div>
     </div>
 
-    <!-- Join Modal -->
     <div class="modal-overlay" id="joinModal">
         <div class="modal">
             <h3>🔗 Gabung Channel</h3>
-            <p>Masukkan kode channel dari pembuat:</p>
+            <p>Masukkan kode channel:</p>
             <div class="join-code">
                 <input type="text" id="joinCodeInput" placeholder="XXXX-XXXX" maxlength="9">
             </div>
@@ -930,13 +260,12 @@
         </div>
     </div>
 
-    <!-- QR Modal -->
     <div class="modal-overlay" id="qrModal">
         <div class="modal">
-            <h3>📱 Scan untuk Bergabung</h3>
-            <p>Device lain scan QR ini:</p>
+            <h3>📱 Kode Channel</h3>
+            <p>Bagikan kode ini ke teman:</p>
             <div style="text-align: center; margin: 12px 0;">
-                <div style="font-size: 20px; font-weight: 700; color: #e94560; letter-spacing: 2px;" id="displayRoomCode">-</div>
+                <div style="font-size: 24px; font-weight: 700; color: #e94560; letter-spacing: 2px;" id="displayRoomCode">-</div>
             </div>
             <div id="qrcode"></div>
             <button class="btn btn-secondary" onclick="closeQrModal()">
@@ -945,7 +274,6 @@
         </div>
     </div>
 
-    <!-- Toast -->
     <div class="toast" id="toast">
         <span id="toastIcon">ℹ️</span>
         <span id="toastMessage">Message</span>
@@ -960,19 +288,20 @@
         let audioChunks = [];
         let isRecording = false;
         let isHandsfree = false;
-        let peers = new Map(); // id -> {pc, dc, name, audioElement}
+        let peers = new Map(); // peerId -> {pc, dc, name, audioElement}
         let myId = generateId();
         let myName = 'User';
         let roomId = null;
         let audioContext = null;
         let analyser = null;
         let volumeInterval = null;
-        let broadcastChannel = null;
-        let pendingSignals = new Map(); // For SDP exchange
+        let ws = null;
+        let serverUrl = '';
+        let isConnected = false;
 
         // ==================== UTILS ====================
         function generateId() {
-            return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            return Math.random().toString(36).substr(2, 9) + Date.now().toString(36).substr(-4);
         }
 
         function generateRoomCode() {
@@ -993,17 +322,19 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        function updateStatus(online) {
+        function updateStatus(status) {
             const badge = document.getElementById('statusBadge');
             const text = document.getElementById('statusText');
             const dot = badge.querySelector('.status-dot');
             
-            if (online) {
-                badge.className = 'status-badge status-online';
+            badge.className = 'status-badge status-' + status;
+            if (status === 'online') {
                 text.textContent = 'Online';
                 dot.style.background = '#2ecc71';
+            } else if (status === 'connecting') {
+                text.textContent = 'Connecting...';
+                dot.style.background = '#f1c40f';
             } else {
-                badge.className = 'status-badge status-offline';
                 text.textContent = 'Offline';
                 dot.style.background = '#e74c3c';
             }
@@ -1031,7 +362,6 @@
                 return true;
             } catch (err) {
                 showToast('Izin mikrofon ditolak! ' + err.message, '❌');
-                console.error('Mic error:', err);
                 return false;
             }
         }
@@ -1053,7 +383,96 @@
             document.getElementById('volumeFill').style.width = '0%';
         }
 
-        // ==================== WEBRTC (FIXED) ====================
+        // ==================== WEBSOCKET ====================
+        function connectWebSocket() {
+            return new Promise((resolve, reject) => {
+                let url = document.getElementById('serverUrl').value.trim() || 'https://walkie-signaling.onrender.com';
+                
+                // Convert http/https to ws/wss
+                if (url.startsWith('https://')) {
+                    url = url.replace('https://', 'wss://');
+                } else if (url.startsWith('http://')) {
+                    url = url.replace('http://', 'ws://');
+                } else if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+                    url = 'wss://' + url;
+                }
+                
+                serverUrl = url;
+                console.log('Connecting to WebSocket:', serverUrl);
+                
+                updateStatus('connecting');
+                showToast('Menghubungkan ke server...', '⏳');
+                
+                try {
+                    ws = new WebSocket(serverUrl);
+                    
+                    ws.onopen = () => {
+                        console.log('WebSocket connected!');
+                        isConnected = true;
+                        updateStatus('online');
+                        showToast('Terhubung ke server!', '✅');
+                        resolve();
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            handleWsMessage(data);
+                        } catch (e) {
+                            console.error('WS message error:', e);
+                        }
+                    };
+                    
+                    ws.onerror = (err) => {
+                        console.error('WebSocket error:', err);
+                        showToast('Gagal konek ke server! Cek URL', '❌');
+                        updateStatus('offline');
+                        reject(err);
+                    };
+                    
+                    ws.onclose = () => {
+                        isConnected = false;
+                        updateStatus('offline');
+                        showToast('Koneksi terputus', '⚠️');
+                    };
+                    
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+
+        function handleWsMessage(data) {
+            console.log('WS received:', data.type, 'from:', data.sender || 'server');
+            
+            switch(data.type) {
+                case 'peer-joined':
+                    if (data.id !== myId && !peers.has(data.id)) {
+                        showToast(`${data.name} bergabung!`, '👋');
+                        addMemberChip(data.id, data.name);
+                        // Initiate WebRTC connection as initiator
+                        setTimeout(() => connectToPeer(data.id, true), 800);
+                    }
+                    break;
+                    
+                case 'peer-left':
+                    showToast(`${data.name} keluar`, '👋');
+                    removePeer(data.id);
+                    break;
+                    
+                case 'signal':
+                    handleSignal(data);
+                    break;
+            }
+        }
+
+        function sendWs(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(data));
+            }
+        }
+
+        // ==================== WEBRTC ====================
         function createPeerConnection(peerId) {
             const config = {
                 iceServers: [
@@ -1064,35 +483,31 @@
             
             const pc = new RTCPeerConnection(config);
             
-            // Add local stream tracks
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     pc.addTrack(track, localStream);
                 });
             }
             
-            // CRITICAL FIX: Handle incoming stream with visible audio element
             pc.ontrack = (event) => {
-                console.log('Received remote stream from', peerId);
+                console.log('🔊 Received remote stream from', peerId);
                 const remoteStream = event.streams[0];
                 
-                // Create audio element in hidden container (required for mobile autoplay)
                 const audioEl = document.createElement('audio');
                 audioEl.srcObject = remoteStream;
                 audioEl.autoplay = true;
-                audioEl.playsInline = true; // iOS requirement
+                audioEl.playsInline = true;
                 audioEl.setAttribute('playsinline', '');
                 audioEl.muted = false;
                 audioEl.volume = 1.0;
                 
                 document.getElementById('audioContainer').appendChild(audioEl);
                 
-                // Force play
+                // Try to play immediately
                 const playPromise = audioEl.play();
                 if (playPromise) {
                     playPromise.catch(err => {
-                        console.log('Autoplay blocked, waiting for user interaction');
-                        // Store for later playback
+                        console.log('Autoplay blocked, will retry on interaction');
                     });
                 }
                 
@@ -1102,26 +517,27 @@
                     peer.remoteStream = remoteStream;
                 }
                 
-                showToast('Audio terhubung!', '🔊');
+                showToast('Audio peer terhubung!', '🔊');
             };
             
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
-                    broadcastSignal({
-                        type: 'ice',
+                    sendWs({
+                        type: 'signal',
                         target: peerId,
-                        sender: myId,
-                        candidate: event.candidate
+                        signal: { type: 'ice', candidate: event.candidate }
                     });
                 }
             };
             
             pc.onconnectionstatechange = () => {
-                console.log('Connection state:', pc.connectionState);
+                console.log('Peer', peerId, 'state:', pc.connectionState);
                 if (pc.connectionState === 'connected') {
-                    showToast('Peer terhubung!', '✅');
-                } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-                    removePeer(peerId);
+                    showToast('Peer connected!', '✅');
+                } else if (pc.connectionState === 'failed') {
+                    setTimeout(() => {
+                        if (pc.connectionState === 'failed') removePeer(peerId);
+                    }, 5000);
                 }
             };
             
@@ -1129,9 +545,12 @@
         }
 
         async function connectToPeer(peerId, asInitiator) {
-            if (peers.has(peerId)) return;
+            if (peers.has(peerId)) {
+                console.log('Already connected to', peerId);
+                return;
+            }
             
-            console.log('Connecting to peer:', peerId, 'as initiator:', asInitiator);
+            console.log('🔄 Connecting to peer:', peerId, 'initiator:', asInitiator);
             
             const pc = createPeerConnection(peerId);
             const peerData = {
@@ -1144,25 +563,27 @@
             };
             peers.set(peerId, peerData);
             
-            // Create data channel
             let dc;
             if (asInitiator) {
+                console.log('Creating data channel...');
                 dc = pc.createDataChannel('chat', { ordered: true });
                 setupDataChannel(dc, peerId);
                 peerData.dc = dc;
                 
-                // Create offer
+                console.log('Creating offer...');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 
-                broadcastSignal({
-                    type: 'offer',
+                sendWs({
+                    type: 'signal',
                     target: peerId,
-                    sender: myId,
-                    sdp: offer
+                    signal: { type: 'offer', sdp: offer }
                 });
+                
+                console.log('Offer sent to', peerId);
             } else {
                 pc.ondatachannel = (event) => {
+                    console.log('Received data channel from', peerId);
                     dc = event.channel;
                     setupDataChannel(dc, peerId);
                     peerData.dc = dc;
@@ -1174,20 +595,15 @@
 
         function setupDataChannel(dc, peerId) {
             dc.onopen = () => {
-                console.log('Data channel open with', peerId);
-                dc.send(JSON.stringify({
-                    type: 'intro',
-                    name: myName,
-                    id: myId
-                }));
+                console.log('✅ Data channel OPEN with', peerId);
+                dc.send(JSON.stringify({ type: 'intro', name: myName, id: myId }));
             };
             
-            dc.onmessage = async (event) => {
+            dc.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    handleDataMessage(data, peerId);
+                    handleDcMessage(data, peerId);
                 } catch (e) {
-                    // Binary audio data
                     if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
                         playAudioData(event.data, peerId);
                     }
@@ -1197,9 +613,54 @@
             dc.onclose = () => {
                 console.log('Data channel closed with', peerId);
             };
+            
+            dc.onerror = (err) => {
+                console.error('Data channel error:', err);
+            };
         }
 
-        async function handleDataMessage(data, peerId) {
+        async function handleSignal(data) {
+            const peerId = data.sender;
+            console.log('Received signal:', data.signal.type, 'from', peerId);
+            
+            let peer = peers.get(peerId);
+            
+            if (data.signal.type === 'offer') {
+                console.log('Processing offer from', peerId);
+                if (!peer) {
+                    await connectToPeer(peerId, false);
+                    peer = peers.get(peerId);
+                }
+                if (peer) {
+                    await peer.pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
+                    const answer = await peer.pc.createAnswer();
+                    await peer.pc.setLocalDescription(answer);
+                    
+                    sendWs({
+                        type: 'signal',
+                        target: peerId,
+                        signal: { type: 'answer', sdp: answer }
+                    });
+                    
+                    console.log('Answer sent to', peerId);
+                }
+            } else if (data.signal.type === 'answer') {
+                console.log('Processing answer from', peerId);
+                if (peer) {
+                    await peer.pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
+                }
+            } else if (data.signal.type === 'ice') {
+                if (peer) {
+                    try {
+                        await peer.pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+                    } catch (e) {
+                        console.error('ICE error:', e);
+                    }
+                }
+            }
+        }
+
+        function handleDcMessage(data, peerId) {
             const peer = peers.get(peerId);
             
             switch(data.type) {
@@ -1208,14 +669,13 @@
                         peer.name = data.name;
                         peer.id = data.id;
                         addMemberChip(data.id, data.name);
-                        showToast(`${data.name} bergabung!`, '👋');
                         updateMemberCount();
+                        showToast(`${data.name} siap!`, '✅');
                     }
                     break;
                     
                 case 'text':
-                    addMessageToChat(data.name, data.text, false, false);
-                    showToast(`Pesan dari ${data.name}`, '💬');
+                    addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false, false);
                     break;
                     
                 case 'speaking':
@@ -1225,119 +685,7 @@
                 case 'stopped':
                     highlightMember(data.id, false);
                     break;
-                    
-                case 'offer':
-                    await handleOffer(data, peerId);
-                    break;
-                    
-                case 'answer':
-                    await handleAnswer(data, peerId);
-                    break;
-                    
-                case 'ice':
-                    await handleIce(data, peerId);
-                    break;
             }
-        }
-
-        async function handleOffer(data, peerId) {
-            let peer = peers.get(peerId);
-            if (!peer) {
-                await connectToPeer(peerId, false);
-                peer = peers.get(peerId);
-            }
-            
-            if (!peer) return;
-            
-            await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            const answer = await peer.pc.createAnswer();
-            await peer.pc.setLocalDescription(answer);
-            
-            broadcastSignal({
-                type: 'answer',
-                target: peerId,
-                sender: myId,
-                sdp: answer
-            });
-        }
-
-        async function handleAnswer(data, peerId) {
-            const peer = peers.get(peerId);
-            if (peer) {
-                await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            }
-        }
-
-        async function handleIce(data, peerId) {
-            const peer = peers.get(peerId);
-            if (peer && data.candidate) {
-                try {
-                    await peer.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                } catch (e) {
-                    console.error('ICE error:', e);
-                }
-            }
-        }
-
-        function broadcastSignal(data) {
-            if (broadcastChannel) {
-                broadcastChannel.postMessage(data);
-            }
-        }
-
-        // ==================== BROADCAST CHANNEL ====================
-        function setupBroadcast() {
-            if (!window.BroadcastChannel) {
-                showToast('Browser tidak support BroadcastChannel', '❌');
-                return;
-            }
-            
-            broadcastChannel = new BroadcastChannel('walkietalkie-' + roomId);
-            
-            broadcastChannel.onmessage = async (event) => {
-                const data = event.data;
-                
-                // Ignore own messages
-                if (data.sender === myId) return;
-                
-                if (data.type === 'discover') {
-                    // Someone looking for room
-                    if (!peers.has(data.sender)) {
-                        await connectToPeer(data.sender, true);
-                    }
-                } else if (data.target === myId || data.target === 'all') {
-                    // Directed signal
-                    if (data.type === 'offer' && !peers.has(data.sender)) {
-                        await connectToPeer(data.sender, false);
-                    }
-                    
-                    // Route to handler
-                    const peer = peers.get(data.sender);
-                    if (peer || data.type === 'offer') {
-                        handleDataMessage(data, data.sender);
-                    }
-                }
-            };
-            
-            // Announce presence
-            setInterval(() => {
-                if (broadcastChannel) {
-                    broadcastChannel.postMessage({
-                        type: 'discover',
-                        sender: myId,
-                        room: roomId,
-                        name: myName
-                    });
-                }
-            }, 3000);
-            
-            // Initial announce
-            broadcastChannel.postMessage({
-                type: 'discover',
-                sender: myId,
-                room: roomId,
-                name: myName
-            });
         }
 
         // ==================== ROOM MANAGEMENT ====================
@@ -1345,20 +693,33 @@
             myName = document.getElementById('userName').value.trim() || 'User';
             roomId = generateRoomCode().replace('-', '');
             
+            try {
+                await connectWebSocket();
+            } catch (err) {
+                showToast('Gagal konek server! Cek URL', '❌');
+                return;
+            }
+            
             const success = await initAudio();
             if (!success) return;
             
-            document.getElementById('selfName').textContent = myName;
+            // Join room
+            sendWs({
+                type: 'join',
+                room: roomId,
+                id: myId,
+                name: myName
+            });
+            
+            document.getElementById('selfName').textContent = myName + ' (Kamu)';
             document.getElementById('selfAvatar').textContent = myName.charAt(0).toUpperCase();
             document.getElementById('roomName').textContent = 'Channel ' + roomId;
             document.getElementById('roomCode').textContent = 'Kode: ' + roomId;
             
             showSetupComplete();
             showQrModal();
-            updateStatus(true);
-            setupBroadcast();
             
-            showToast('Channel dibuat! Tunggu peer bergabung', '✅');
+            showToast('Channel dibuat! Kode: ' + roomId, '✅');
         }
 
         function showJoinModal() {
@@ -1379,20 +740,32 @@
             myName = document.getElementById('userName').value.trim() || 'User';
             roomId = code;
             
+            try {
+                await connectWebSocket();
+            } catch (err) {
+                showToast('Gagal konek server! Cek URL', '❌');
+                return;
+            }
+            
             const success = await initAudio();
             if (!success) return;
             
-            document.getElementById('selfName').textContent = myName;
+            sendWs({
+                type: 'join',
+                room: roomId,
+                id: myId,
+                name: myName
+            });
+            
+            document.getElementById('selfName').textContent = myName + ' (Kamu)';
             document.getElementById('selfAvatar').textContent = myName.charAt(0).toUpperCase();
             document.getElementById('roomName').textContent = 'Channel ' + code;
             document.getElementById('roomCode').textContent = 'Kode: ' + code;
             
             closeJoinModal();
             showSetupComplete();
-            updateStatus(true);
-            setupBroadcast();
             
-            showToast('Mencari channel...', '⏳');
+            showToast('Bergabung ke channel!', '✅');
         }
 
         function showSetupComplete() {
@@ -1435,7 +808,7 @@
             }
         }
 
-        // ==================== PTT & HANDSFREE ====================
+        // ==================== PTT ====================
         function toggleHandsfree() {
             isHandsfree = !isHandsfree;
             const toggle = document.getElementById('handsfreeToggle');
@@ -1446,7 +819,6 @@
                 toggle.classList.add('active');
                 btn.classList.add('locked');
                 label.textContent = 'KETUK UNTUK BICARA, KETUK LAGI UNTUK SELESAI';
-                showToast('Mode Handsfree aktif', '🔓');
             } else {
                 toggle.classList.remove('active');
                 btn.classList.remove('locked');
@@ -1457,24 +829,17 @@
 
         function handlePttStart(e) {
             if (e) e.preventDefault();
-            
             if (isHandsfree) {
-                // Toggle mode
-                if (isRecording) {
-                    stopTalking();
-                } else {
-                    startTalking();
-                }
+                if (isRecording) stopTalking();
+                else startTalking();
                 return;
             }
-            
-            // Normal push-to-talk
             startTalking();
         }
 
         function handlePttEnd(e) {
             if (e) e.preventDefault();
-            if (isHandsfree) return; // Handsfree uses toggle, not hold
+            if (isHandsfree) return;
             stopTalking();
         }
 
@@ -1482,18 +847,14 @@
             if (isRecording) return;
             
             isRecording = true;
-            const btn = document.getElementById('pttButton');
-            btn.classList.add('recording');
+            document.getElementById('pttButton').classList.add('recording');
             document.getElementById('pttStatus').textContent = 'MEREKAM...';
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
             startVolumeMeter();
-            
-            // Notify peers
             broadcastToPeers({ type: 'speaking', id: myId });
             
-            // Start recording
             audioChunks = [];
             if (!localStream) await initAudio();
             
@@ -1517,7 +878,6 @@
                 
                 mediaRecorder.start(50);
             } catch (err) {
-                console.error('Recording error:', err);
                 showToast('Gagal merekam: ' + err.message, '❌');
             }
         }
@@ -1526,8 +886,7 @@
             if (!isRecording) return;
             
             isRecording = false;
-            const btn = document.getElementById('pttButton');
-            btn.classList.remove('recording');
+            document.getElementById('pttButton').classList.remove('recording');
             document.getElementById('pttStatus').textContent = '';
             document.getElementById('selfWave').style.display = 'none';
             highlightMember(myId, false);
@@ -1541,36 +900,27 @@
         }
 
         function broadcastToPeers(data) {
-            peers.forEach((peer, id) => {
+            peers.forEach((peer) => {
                 if (peer.dc && peer.dc.readyState === 'open') {
                     peer.dc.send(JSON.stringify(data));
                 }
             });
+            
+            // Fallback via WS
+            sendWs({ type: 'broadcast', payload: data });
         }
 
         function sendAudioToPeers(blob) {
             const reader = new FileReader();
             reader.onload = () => {
                 const arrayBuffer = reader.result;
-                peers.forEach((peer, id) => {
+                peers.forEach((peer) => {
                     if (peer.dc && peer.dc.readyState === 'open') {
-                        // Send in chunks if needed
                         const chunkSize = 16384;
-                        const totalChunks = Math.ceil(arrayBuffer.byteLength / chunkSize);
-                        
-                        for (let i = 0; i < totalChunks; i++) {
-                            const start = i * chunkSize;
-                            const end = Math.min(start + chunkSize, arrayBuffer.byteLength);
-                            const chunk = arrayBuffer.slice(start, end);
+                        for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
+                            const chunk = arrayBuffer.slice(i, i + chunkSize);
                             peer.dc.send(chunk);
                         }
-                        
-                        // Send end marker
-                        setTimeout(() => {
-                            if (peer.dc.readyState === 'open') {
-                                peer.dc.send(JSON.stringify({ type: 'audio-end' }));
-                            }
-                        }, 100);
                     }
                 });
             };
@@ -1580,14 +930,9 @@
         let audioBuffers = new Map();
 
         function playAudioData(data, peerId) {
-            if (typeof data === 'string') return; // Skip JSON
-            
-            if (!audioBuffers.has(peerId)) {
-                audioBuffers.set(peerId, []);
-            }
+            if (!audioBuffers.has(peerId)) audioBuffers.set(peerId, []);
             audioBuffers.get(peerId).push(data);
             
-            // Play after a short delay to collect chunks
             clearTimeout(window['audioTimeout_' + peerId]);
             window['audioTimeout_' + peerId] = setTimeout(() => {
                 const chunks = audioBuffers.get(peerId);
@@ -1597,28 +942,19 @@
                 
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 const url = URL.createObjectURL(blob);
-                
                 const audio = new Audio(url);
                 audio.volume = 1.0;
                 
-                // Add to container for mobile autoplay
                 document.getElementById('audioContainer').appendChild(audio);
                 
                 audio.play().then(() => {
                     const peer = peers.get(peerId);
-                    if (peer) {
-                        addMessageToChat(peer.name, '🎙️ Voice', false, true);
-                    }
-                }).catch(err => {
-                    console.error('Playback error:', err);
-                    // Try again with user interaction
+                    if (peer) addMessageToChat(peer.name, '🎙️ Voice', false, true);
+                }).catch(() => {
                     showToast('Tap layar untuk enable audio', '🔊');
                 });
                 
-                audio.onended = () => {
-                    URL.revokeObjectURL(url);
-                    audio.remove();
-                };
+                audio.onended = () => { URL.revokeObjectURL(url); audio.remove(); };
             }, 300);
         }
 
@@ -1628,17 +964,15 @@
             const text = input.value.trim();
             if (!text) return;
             
-            // Send to all peers
-            peers.forEach((peer, id) => {
+            const msg = { type: 'text', name: myName, text: text, time: Date.now() };
+            
+            peers.forEach((peer) => {
                 if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(JSON.stringify({
-                        type: 'text',
-                        name: myName,
-                        text: text,
-                        time: Date.now()
-                    }));
+                    peer.dc.send(JSON.stringify(msg));
                 }
             });
+            
+            sendWs({ type: 'broadcast', payload: msg });
             
             addMessageToChat(myName, text, true, false);
             input.value = '';
@@ -1648,11 +982,10 @@
             if (e.key === 'Enter') sendTextMessage();
         });
 
-        // ==================== UI UPDATES ====================
+        // ==================== UI ====================
         function addMemberChip(id, name) {
             const panel = document.getElementById('membersPanel');
             const chipId = 'member-' + id;
-            
             if (document.getElementById(chipId)) return;
             
             const chip = document.createElement('div');
@@ -1687,8 +1020,6 @@
 
         function addMessageToChat(author, text, isOwn, isVoice = false) {
             const area = document.getElementById('messagesArea');
-            
-            // Remove welcome message if exists
             if (area.children.length === 1 && area.children[0].style.textAlign === 'center') {
                 area.innerHTML = '';
             }
@@ -1696,16 +1027,13 @@
             const msg = document.createElement('div');
             msg.className = 'message' + (isOwn ? ' message-own' : '');
             
-            const time = new Date().toLocaleTimeString('id-ID', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
+            const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
             
             msg.innerHTML = `
                 <div class="message-avatar">${author.charAt(0).toUpperCase()}</div>
                 <div class="message-content">
                     <div class="message-header">
-                        <span class="message-author">${author}</span>
+                        <span class="message-author">${escapeHtml(author)}</span>
                         <span class="message-time">${time}</span>
                     </div>
                     <div class="message-text">${escapeHtml(text)}</div>
@@ -1732,11 +1060,9 @@
             }
         };
 
-        // Prevent zoom and context menu
         document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
         window.oncontextmenu = (e) => { e.preventDefault(); return false; };
         
-        // Keep audio context alive
         document.addEventListener('click', () => {
             if (audioContext && audioContext.state === 'suspended') {
                 audioContext.resume();
