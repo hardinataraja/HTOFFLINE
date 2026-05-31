@@ -288,9 +288,7 @@
     <script>
         // ==================== STATE ====================
         let localStream = null;
-        let mutedStream = null; // Stream with tracks disabled
         let mediaRecorder = null;
-        let audioChunks = [];
         let isRecording = false;
         let isHandsfree = false;
         let peers = new Map();
@@ -345,7 +343,7 @@
             }
         }
 
-        // ==================== AUDIO - MUTED BY DEFAULT ====================
+        // ==================== AUDIO ====================
         async function initAudio() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ 
@@ -358,7 +356,7 @@
                     } 
                 });
                 
-                // CRITICAL: Mute all tracks by default!
+                // MUTE by default
                 localStream.getAudioTracks().forEach(track => {
                     track.enabled = false;
                 });
@@ -407,38 +405,41 @@
 
         // ==================== CLEANUP ====================
         function cleanupAll() {
-            // Stop recording
-            if (isRecording) stopTalking();
+            if (isRecording) {
+                isRecording = false;
+                disableMic();
+                stopVolumeMeter();
+            }
             
-            // Close all peer connections
             peers.forEach((peer, peerId) => {
                 if (peer.audioElement) {
                     peer.audioElement.pause();
+                    peer.audioElement.srcObject = null;
                     peer.audioElement.remove();
                 }
-                if (peer.pc) peer.pc.close();
+                if (peer.pc) {
+                    peer.pc.ontrack = null;
+                    peer.pc.onicecandidate = null;
+                    peer.pc.close();
+                }
             });
             peers.clear();
             
-            // Close WebSocket
             if (ws) {
                 ws.close();
                 ws = null;
             }
             
-            // Stop local stream
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
             }
             
-            // Reset audio context
             if (audioContext) {
                 audioContext.close();
                 audioContext = null;
             }
             
-            // Clear UI
             document.getElementById('membersPanel').innerHTML = `
                 <div class="member-chip" id="selfChip">
                     <div class="member-avatar" id="selfAvatar">U</div>
@@ -459,7 +460,7 @@
             
             isConnected = false;
             roomId = null;
-            myId = generateId(); // Generate new ID
+            myId = generateId();
         }
 
         function exitRoom() {
@@ -484,7 +485,6 @@
                 }
                 
                 serverUrl = url;
-                console.log('Connecting to WebSocket:', serverUrl);
                 
                 updateStatus('connecting');
                 showToast('Menghubungkan ke server...', '⏳');
@@ -493,7 +493,6 @@
                     ws = new WebSocket(serverUrl);
                     
                     ws.onopen = () => {
-                        console.log('WebSocket connected!');
                         isConnected = true;
                         updateStatus('online');
                         showToast('Terhubung ke server!', '✅');
@@ -510,8 +509,7 @@
                     };
                     
                     ws.onerror = (err) => {
-                        console.error('WebSocket error:', err);
-                        showToast('Gagal konek ke server! Cek URL', '❌');
+                        showToast('Gagal konek ke server!', '❌');
                         updateStatus('offline');
                         reject(err);
                     };
@@ -528,8 +526,6 @@
         }
 
         function handleWsMessage(data) {
-            console.log('WS received:', data.type, 'from:', data.sender || 'server');
-            
             switch(data.type) {
                 case 'peer-joined':
                     if (data.id !== myId && !peers.has(data.id)) {
@@ -567,7 +563,7 @@
             
             const pc = new RTCPeerConnection(config);
             
-            // Add tracks BUT muted by default
+            // Add muted tracks
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     pc.addTrack(track, localStream);
@@ -575,10 +571,14 @@
             }
             
             pc.ontrack = (event) => {
-                console.log('🔊 Received remote stream from', peerId);
                 const remoteStream = event.streams[0];
                 
+                // Prevent duplicate audio elements
+                const existing = document.getElementById('audio-peer-' + peerId);
+                if (existing) existing.remove();
+                
                 const audioEl = document.createElement('audio');
+                audioEl.id = 'audio-peer-' + peerId;
                 audioEl.srcObject = remoteStream;
                 audioEl.autoplay = true;
                 audioEl.playsInline = true;
@@ -588,12 +588,9 @@
                 
                 document.getElementById('audioContainer').appendChild(audioEl);
                 
-                const playPromise = audioEl.play();
-                if (playPromise) {
-                    playPromise.catch(err => {
-                        console.log('Autoplay blocked:', err);
-                    });
-                }
+                audioEl.play().catch(err => {
+                    console.log('Autoplay blocked:', err);
+                });
                 
                 const peer = peers.get(peerId);
                 if (peer) {
@@ -615,7 +612,6 @@
             };
             
             pc.onconnectionstatechange = () => {
-                console.log('Peer', peerId, 'state:', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     showToast('Peer connected!', '✅');
                 } else if (pc.connectionState === 'failed') {
@@ -630,8 +626,6 @@
 
         async function connectToPeer(peerId, asInitiator) {
             if (peers.has(peerId)) return;
-            
-            console.log('🔄 Connecting to peer:', peerId, 'initiator:', asInitiator);
             
             const pc = createPeerConnection(peerId);
             const peerData = {
@@ -671,7 +665,6 @@
 
         function setupDataChannel(dc, peerId) {
             dc.onopen = () => {
-                console.log('✅ Data channel OPEN with', peerId);
                 dc.send(JSON.stringify({ type: 'intro', name: myName, id: myId }));
             };
             
@@ -680,9 +673,7 @@
                     const data = JSON.parse(event.data);
                     handleDcMessage(data, peerId);
                 } catch (e) {
-                    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
-                        playAudioData(event.data, peerId);
-                    }
+                    // Ignore binary data - we use WebRTC track for audio
                 }
             };
         }
@@ -749,9 +740,8 @@
             }
         }
 
-        // ==================== ROOM MANAGEMENT ====================
+        // ==================== ROOM ====================
         async function createRoom() {
-            // Cleanup first if reconnecting
             cleanupAll();
             
             myName = document.getElementById('userName').value.trim() || 'User';
@@ -781,7 +771,6 @@
             
             showSetupComplete();
             showQrModal();
-            
             showToast('Channel dibuat! Kode: ' + roomId, '✅');
         }
 
@@ -794,7 +783,6 @@
         }
 
         async function joinRoom() {
-            // Cleanup first if reconnecting
             cleanupAll();
             
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase().replace('-', '');
@@ -830,7 +818,6 @@
             
             closeJoinModal();
             showSetupComplete();
-            
             showToast('Bergabung ke channel!', '✅');
         }
 
@@ -918,37 +905,11 @@
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
-            // ENABLE MIC
+            // ENABLE MIC - WebRTC track will stream automatically
             enableMic();
             
             startVolumeMeter();
             broadcastToPeers({ type: 'speaking', id: myId });
-            
-            audioChunks = [];
-            if (!localStream) await initAudio();
-            
-            try {
-                const options = { mimeType: 'audio/webm;codecs=opus' };
-                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options.mimeType = 'audio/webm';
-                }
-                
-                mediaRecorder = new MediaRecorder(localStream, options);
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) audioChunks.push(event.data);
-                };
-                
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    sendAudioToPeers(audioBlob);
-                    addMessageToChat(myName, '🎙️ Voice', true, true);
-                };
-                
-                mediaRecorder.start(50);
-            } catch (err) {
-                showToast('Gagal merekam: ' + err.message, '❌');
-            }
         }
 
         function stopTalking() {
@@ -960,15 +921,11 @@
             document.getElementById('selfWave').style.display = 'none';
             highlightMember(myId, false);
             
-            // DISABLE MIC
+            // DISABLE MIC - WebRTC track stops streaming
             disableMic();
             
             stopVolumeMeter();
             broadcastToPeers({ type: 'stopped', id: myId });
-            
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
         }
 
         function broadcastToPeers(data) {
@@ -979,54 +936,6 @@
             });
             
             sendWs({ type: 'broadcast', payload: data });
-        }
-
-        function sendAudioToPeers(blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const arrayBuffer = reader.result;
-                peers.forEach((peer) => {
-                    if (peer.dc && peer.dc.readyState === 'open') {
-                        const chunkSize = 16384;
-                        for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
-                            const chunk = arrayBuffer.slice(i, i + chunkSize);
-                            peer.dc.send(chunk);
-                        }
-                    }
-                });
-            };
-            reader.readAsArrayBuffer(blob);
-        }
-
-        let audioBuffers = new Map();
-
-        function playAudioData(data, peerId) {
-            if (!audioBuffers.has(peerId)) audioBuffers.set(peerId, []);
-            audioBuffers.get(peerId).push(data);
-            
-            clearTimeout(window['audioTimeout_' + peerId]);
-            window['audioTimeout_' + peerId] = setTimeout(() => {
-                const chunks = audioBuffers.get(peerId);
-                audioBuffers.set(peerId, []);
-                
-                if (chunks.length === 0) return;
-                
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audio.volume = 1.0;
-                
-                document.getElementById('audioContainer').appendChild(audio);
-                
-                audio.play().then(() => {
-                    const peer = peers.get(peerId);
-                    if (peer) addMessageToChat(peer.name, '🎙️ Voice', false, true);
-                }).catch(() => {
-                    showToast('Tap layar untuk enable audio', '🔊');
-                });
-                
-                audio.onended = () => { URL.revokeObjectURL(url); audio.remove(); };
-            }, 300);
         }
 
         // ==================== TEXT CHAT ====================
@@ -1089,7 +998,7 @@
             document.getElementById('memberCount').textContent = peers.size + 1;
         }
 
-        function addMessageToChat(author, text, isOwn, isVoice = false) {
+        function addMessageToChat(author, text, isOwn) {
             const area = document.getElementById('messagesArea');
             if (area.children.length === 1 && area.children[0].style.textAlign === 'center') {
                 area.innerHTML = '';
