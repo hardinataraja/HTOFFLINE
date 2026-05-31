@@ -288,9 +288,6 @@
     <script>
         // ==================== STATE ====================
         let localStream = null;
-        let mutedStream = null; // Stream with tracks disabled
-        let mediaRecorder = null;
-        let audioChunks = [];
         let isRecording = false;
         let isHandsfree = false;
         let peers = new Map();
@@ -680,9 +677,7 @@
                     const data = JSON.parse(event.data);
                     handleDcMessage(data, peerId);
                 } catch (e) {
-                    if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
-                        playAudioData(event.data, peerId);
-                    }
+                    // Binary data ignored — audio handled via WebRTC track
                 }
             };
         }
@@ -745,6 +740,7 @@
                     
                 case 'stopped':
                     highlightMember(data.id, false);
+                    if (peer) addMessageToChat(peer.name, '🎙️ Voice', false, true);
                     break;
             }
         }
@@ -918,37 +914,11 @@
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
-            // ENABLE MIC
+            // ENABLE MIC - audio flows via WebRTC track
             enableMic();
             
             startVolumeMeter();
             broadcastToPeers({ type: 'speaking', id: myId });
-            
-            audioChunks = [];
-            if (!localStream) await initAudio();
-            
-            try {
-                const options = { mimeType: 'audio/webm;codecs=opus' };
-                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options.mimeType = 'audio/webm';
-                }
-                
-                mediaRecorder = new MediaRecorder(localStream, options);
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) audioChunks.push(event.data);
-                };
-                
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    sendAudioToPeers(audioBlob);
-                    addMessageToChat(myName, '🎙️ Voice', true, true);
-                };
-                
-                mediaRecorder.start(50);
-            } catch (err) {
-                showToast('Gagal merekam: ' + err.message, '❌');
-            }
         }
 
         function stopTalking() {
@@ -965,10 +935,7 @@
             
             stopVolumeMeter();
             broadcastToPeers({ type: 'stopped', id: myId });
-            
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
+            addMessageToChat(myName, '🎙️ Voice', true, true);
         }
 
         function broadcastToPeers(data) {
@@ -979,54 +946,6 @@
             });
             
             sendWs({ type: 'broadcast', payload: data });
-        }
-
-        function sendAudioToPeers(blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const arrayBuffer = reader.result;
-                peers.forEach((peer) => {
-                    if (peer.dc && peer.dc.readyState === 'open') {
-                        const chunkSize = 16384;
-                        for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
-                            const chunk = arrayBuffer.slice(i, i + chunkSize);
-                            peer.dc.send(chunk);
-                        }
-                    }
-                });
-            };
-            reader.readAsArrayBuffer(blob);
-        }
-
-        let audioBuffers = new Map();
-
-        function playAudioData(data, peerId) {
-            if (!audioBuffers.has(peerId)) audioBuffers.set(peerId, []);
-            audioBuffers.get(peerId).push(data);
-            
-            clearTimeout(window['audioTimeout_' + peerId]);
-            window['audioTimeout_' + peerId] = setTimeout(() => {
-                const chunks = audioBuffers.get(peerId);
-                audioBuffers.set(peerId, []);
-                
-                if (chunks.length === 0) return;
-                
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audio.volume = 1.0;
-                
-                document.getElementById('audioContainer').appendChild(audio);
-                
-                audio.play().then(() => {
-                    const peer = peers.get(peerId);
-                    if (peer) addMessageToChat(peer.name, '🎙️ Voice', false, true);
-                }).catch(() => {
-                    showToast('Tap layar untuk enable audio', '🔊');
-                });
-                
-                audio.onended = () => { URL.revokeObjectURL(url); audio.remove(); };
-            }, 300);
         }
 
         // ==================== TEXT CHAT ====================
