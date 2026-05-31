@@ -74,6 +74,7 @@
         .message-author { font-size: 12px; font-weight: 600; color: #e94560; }
         .message-time { font-size: 10px; color: #8b8b9e; white-space: nowrap; }
         .message-text { font-size: 13px; line-height: 1.4; color: #e0e0e0; word-break: break-word; }
+        .message-voice { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 4px 0; }
         .message-own { flex-direction: row-reverse; align-self: flex-end; }
         .message-own .message-content { background: linear-gradient(135deg, #e94560, #c0392b); border-top-left-radius: 14px; border-top-right-radius: 4px; }
         .message-own .message-author { color: #ffcccc; }
@@ -118,11 +119,9 @@
         .modal h3 { margin-bottom: 12px; font-size: 16px; }
         .modal p { color: #8b8b9e; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
         
-        .exit-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 8px; color: #e74c3c; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 50; }
+        #audioContainer { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
         
-        /* Debug panel */
-        .debug-panel { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.9); color: #0f0; font-family: monospace; font-size: 10px; padding: 8px; max-height: 120px; overflow-y: auto; z-index: 9999; display: none; }
-        .debug-panel.show { display: block; }
+        .exit-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 8px; color: #e74c3c; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 50; }
         
         @media (max-width: 380px) { .ptt-button { width: 85px; height: 85px; font-size: 30px; } }
         ::-webkit-scrollbar { width: 4px; }
@@ -131,6 +130,8 @@
     </style>
 </head>
 <body>
+
+    <div id="audioContainer"></div>
 
     <div class="header">
         <div class="logo">
@@ -282,23 +283,12 @@
         <span id="toastMessage">Message</span>
     </div>
 
-    <div class="debug-panel" id="debugPanel"></div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script>
-        // ==================== DEBUG ====================
-        function log(msg) {
-            console.log(msg);
-            const panel = document.getElementById('debugPanel');
-            const line = document.createElement('div');
-            line.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
-            panel.appendChild(line);
-            panel.scrollTop = panel.scrollHeight;
-        }
-
         // ==================== STATE ====================
         let localStream = null;
+        let mutedStream = null; // Stream with tracks disabled
         let mediaRecorder = null;
         let audioChunks = [];
         let isRecording = false;
@@ -355,7 +345,7 @@
             }
         }
 
-        // ==================== AUDIO ====================
+        // ==================== AUDIO - MUTED BY DEFAULT ====================
         async function initAudio() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ 
@@ -368,6 +358,11 @@
                     } 
                 });
                 
+                // CRITICAL: Mute all tracks by default!
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = false;
+                });
+                
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 const source = audioContext.createMediaStreamSource(localStream);
@@ -378,6 +373,18 @@
             } catch (err) {
                 showToast('Izin mikrofon ditolak! ' + err.message, '❌');
                 return false;
+            }
+        }
+
+        function enableMic() {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => track.enabled = true);
+            }
+        }
+
+        function disableMic() {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => track.enabled = false);
             }
         }
 
@@ -400,34 +407,38 @@
 
         // ==================== CLEANUP ====================
         function cleanupAll() {
-            log('CLEANUP started');
+            // Stop recording
+            if (isRecording) stopTalking();
             
-            if (isRecording && mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-            isRecording = false;
-            
+            // Close all peer connections
             peers.forEach((peer, peerId) => {
-                log('Closing peer: ' + peerId);
+                if (peer.audioElement) {
+                    peer.audioElement.pause();
+                    peer.audioElement.remove();
+                }
                 if (peer.pc) peer.pc.close();
             });
             peers.clear();
             
+            // Close WebSocket
             if (ws) {
                 ws.close();
                 ws = null;
             }
             
+            // Stop local stream
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
             }
             
+            // Reset audio context
             if (audioContext) {
                 audioContext.close();
                 audioContext = null;
             }
             
+            // Clear UI
             document.getElementById('membersPanel').innerHTML = `
                 <div class="member-chip" id="selfChip">
                     <div class="member-avatar" id="selfAvatar">U</div>
@@ -448,8 +459,7 @@
             
             isConnected = false;
             roomId = null;
-            myId = generateId();
-            log('CLEANUP done, new ID: ' + myId);
+            myId = generateId(); // Generate new ID
         }
 
         function exitRoom() {
@@ -474,7 +484,7 @@
                 }
                 
                 serverUrl = url;
-                log('WS connecting to: ' + serverUrl);
+                console.log('Connecting to WebSocket:', serverUrl);
                 
                 updateStatus('connecting');
                 showToast('Menghubungkan ke server...', '⏳');
@@ -483,7 +493,7 @@
                     ws = new WebSocket(serverUrl);
                     
                     ws.onopen = () => {
-                        log('WS CONNECTED');
+                        console.log('WebSocket connected!');
                         isConnected = true;
                         updateStatus('online');
                         showToast('Terhubung ke server!', '✅');
@@ -493,22 +503,20 @@
                     ws.onmessage = (event) => {
                         try {
                             const data = JSON.parse(event.data);
-                            log('WS MSG: ' + data.type + ' from ' + (data.sender || 'server'));
                             handleWsMessage(data);
                         } catch (e) {
-                            log('WS MSG ERROR: ' + e);
+                            console.error('WS message error:', e);
                         }
                     };
                     
                     ws.onerror = (err) => {
-                        log('WS ERROR: ' + err);
-                        showToast('Gagal konek ke server!', '❌');
+                        console.error('WebSocket error:', err);
+                        showToast('Gagal konek ke server! Cek URL', '❌');
                         updateStatus('offline');
                         reject(err);
                     };
                     
                     ws.onclose = () => {
-                        log('WS CLOSED');
                         isConnected = false;
                         updateStatus('offline');
                     };
@@ -520,25 +528,23 @@
         }
 
         function handleWsMessage(data) {
+            console.log('WS received:', data.type, 'from:', data.sender || 'server');
+            
             switch(data.type) {
                 case 'peer-joined':
                     if (data.id !== myId && !peers.has(data.id)) {
-                        log('Peer joined: ' + data.name + ' (' + data.id + ')');
                         showToast(`${data.name} bergabung!`, '👋');
                         addMemberChip(data.id, data.name);
-                        // Initiator creates offer to new peer
-                        setTimeout(() => connectToPeer(data.id, true), 500);
+                        setTimeout(() => connectToPeer(data.id, true), 800);
                     }
                     break;
                     
                 case 'peer-left':
-                    log('Peer left: ' + data.name);
                     showToast(`${data.name} keluar`, '👋');
                     removePeer(data.id);
                     break;
                     
                 case 'signal':
-                    log('Signal from: ' + data.sender + ' type: ' + data.signal?.type);
                     handleSignal(data);
                     break;
             }
@@ -547,9 +553,6 @@
         function sendWs(data) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(data));
-                log('WS SEND: ' + data.type + ' to ' + (data.target || 'all'));
-            } else {
-                log('WS SEND FAILED: not open');
             }
         }
 
@@ -564,6 +567,43 @@
             
             const pc = new RTCPeerConnection(config);
             
+            // Add tracks BUT muted by default
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+            }
+            
+            pc.ontrack = (event) => {
+                console.log('🔊 Received remote stream from', peerId);
+                const remoteStream = event.streams[0];
+                
+                const audioEl = document.createElement('audio');
+                audioEl.srcObject = remoteStream;
+                audioEl.autoplay = true;
+                audioEl.playsInline = true;
+                audioEl.setAttribute('playsinline', '');
+                audioEl.muted = false;
+                audioEl.volume = 1.0;
+                
+                document.getElementById('audioContainer').appendChild(audioEl);
+                
+                const playPromise = audioEl.play();
+                if (playPromise) {
+                    playPromise.catch(err => {
+                        console.log('Autoplay blocked:', err);
+                    });
+                }
+                
+                const peer = peers.get(peerId);
+                if (peer) {
+                    peer.audioElement = audioEl;
+                    peer.remoteStream = remoteStream;
+                }
+                
+                showToast('Audio peer terhubung!', '🔊');
+            };
+            
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
                     sendWs({
@@ -575,7 +615,7 @@
             };
             
             pc.onconnectionstatechange = () => {
-                log('Peer ' + peerId + ' state: ' + pc.connectionState);
+                console.log('Peer', peerId, 'state:', pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     showToast('Peer connected!', '✅');
                 } else if (pc.connectionState === 'failed') {
@@ -585,41 +625,31 @@
                 }
             };
             
-            pc.ondatachannel = (event) => {
-                log('DataChannel received from: ' + peerId);
-                const dc = event.channel;
-                setupDataChannel(dc, peerId);
-                const peer = peers.get(peerId);
-                if (peer) peer.dc = dc;
-            };
-            
             return pc;
         }
 
         async function connectToPeer(peerId, asInitiator) {
-            if (peers.has(peerId)) {
-                log('Already has peer: ' + peerId);
-                return;
-            }
+            if (peers.has(peerId)) return;
             
-            log('Connecting to peer: ' + peerId + ' asInitiator: ' + asInitiator);
+            console.log('🔄 Connecting to peer:', peerId, 'initiator:', asInitiator);
             
             const pc = createPeerConnection(peerId);
             const peerData = {
                 pc: pc,
                 dc: null,
                 name: 'Peer',
-                id: peerId
+                id: peerId,
+                audioElement: null,
+                remoteStream: null
             };
             peers.set(peerId, peerData);
             
+            let dc;
             if (asInitiator) {
-                log('Creating DataChannel...');
-                const dc = pc.createDataChannel('chat', { ordered: true });
+                dc = pc.createDataChannel('chat', { ordered: true });
                 setupDataChannel(dc, peerId);
                 peerData.dc = dc;
                 
-                log('Creating offer...');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 
@@ -628,6 +658,12 @@
                     target: peerId,
                     signal: { type: 'offer', sdp: offer }
                 });
+            } else {
+                pc.ondatachannel = (event) => {
+                    dc = event.channel;
+                    setupDataChannel(dc, peerId);
+                    peerData.dc = dc;
+                };
             }
             
             updateMemberCount();
@@ -635,29 +671,19 @@
 
         function setupDataChannel(dc, peerId) {
             dc.onopen = () => {
-                log('✅ DataChannel OPEN with: ' + peerId);
+                console.log('✅ Data channel OPEN with', peerId);
                 dc.send(JSON.stringify({ type: 'intro', name: myName, id: myId }));
             };
             
             dc.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    log('DC MSG from ' + peerId + ': ' + data.type);
                     handleDcMessage(data, peerId);
                 } catch (e) {
-                    // Binary audio data
                     if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
-                        playAudioChunk(event.data, peerId);
+                        playAudioData(event.data, peerId);
                     }
                 }
-            };
-            
-            dc.onclose = () => {
-                log('DataChannel CLOSED: ' + peerId);
-            };
-            
-            dc.onerror = (err) => {
-                log('DataChannel ERROR: ' + peerId + ' - ' + err);
             };
         }
 
@@ -666,7 +692,6 @@
             let peer = peers.get(peerId);
             
             if (data.signal.type === 'offer') {
-                log('Received OFFER from: ' + peerId);
                 if (!peer) {
                     await connectToPeer(peerId, false);
                     peer = peers.get(peerId);
@@ -681,10 +706,8 @@
                         target: peerId,
                         signal: { type: 'answer', sdp: answer }
                     });
-                    log('Sent ANSWER to: ' + peerId);
                 }
             } else if (data.signal.type === 'answer') {
-                log('Received ANSWER from: ' + peerId);
                 if (peer) {
                     await peer.pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
                 }
@@ -693,7 +716,7 @@
                     try {
                         await peer.pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
                     } catch (e) {
-                        log('ICE error: ' + e);
+                        console.error('ICE error:', e);
                     }
                 }
             }
@@ -709,13 +732,11 @@
                         peer.id = data.id;
                         addMemberChip(data.id, data.name);
                         updateMemberCount();
-                        log('Peer intro: ' + data.name);
                     }
                     break;
                     
                 case 'text':
-                    log('TEXT from ' + (data.senderName || peer?.name) + ': ' + data.text);
-                    addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false);
+                    addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false, false);
                     break;
                     
                 case 'speaking':
@@ -728,8 +749,9 @@
             }
         }
 
-        // ==================== ROOM ====================
+        // ==================== ROOM MANAGEMENT ====================
         async function createRoom() {
+            // Cleanup first if reconnecting
             cleanupAll();
             
             myName = document.getElementById('userName').value.trim() || 'User';
@@ -759,6 +781,7 @@
             
             showSetupComplete();
             showQrModal();
+            
             showToast('Channel dibuat! Kode: ' + roomId, '✅');
         }
 
@@ -771,6 +794,7 @@
         }
 
         async function joinRoom() {
+            // Cleanup first if reconnecting
             cleanupAll();
             
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase().replace('-', '');
@@ -806,6 +830,7 @@
             
             closeJoinModal();
             showSetupComplete();
+            
             showToast('Bergabung ke channel!', '✅');
         }
 
@@ -835,6 +860,10 @@
         function removePeer(peerId) {
             const peer = peers.get(peerId);
             if (peer) {
+                if (peer.audioElement) {
+                    peer.audioElement.pause();
+                    peer.audioElement.remove();
+                }
                 if (peer.pc) peer.pc.close();
                 peers.delete(peerId);
                 
@@ -845,7 +874,7 @@
             }
         }
 
-        // ==================== PTT & AUDIO ====================
+        // ==================== PTT ====================
         function toggleHandsfree() {
             isHandsfree = !isHandsfree;
             const toggle = document.getElementById('handsfreeToggle');
@@ -889,16 +918,14 @@
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
+            // ENABLE MIC
+            enableMic();
+            
             startVolumeMeter();
             broadcastToPeers({ type: 'speaking', id: myId });
             
-            if (!localStream) {
-                const success = await initAudio();
-                if (!success) {
-                    stopTalking();
-                    return;
-                }
-            }
+            audioChunks = [];
+            if (!localStream) await initAudio();
             
             try {
                 const options = { mimeType: 'audio/webm;codecs=opus' };
@@ -907,28 +934,20 @@
                 }
                 
                 mediaRecorder = new MediaRecorder(localStream, options);
-                audioChunks = [];
                 
                 mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
+                    if (event.data.size > 0) audioChunks.push(event.data);
                 };
                 
                 mediaRecorder.onstop = () => {
-                    log('MediaRecorder stopped, chunks: ' + audioChunks.length);
-                    if (audioChunks.length > 0) {
-                        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                        sendAudioToPeers(blob);
-                    }
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    sendAudioToPeers(audioBlob);
+                    addMessageToChat(myName, '🎙️ Voice', true, true);
                 };
                 
-                mediaRecorder.start(100);
-                log('MediaRecorder started');
+                mediaRecorder.start(50);
             } catch (err) {
-                log('MediaRecorder error: ' + err);
                 showToast('Gagal merekam: ' + err.message, '❌');
-                stopTalking();
             }
         }
 
@@ -941,6 +960,9 @@
             document.getElementById('selfWave').style.display = 'none';
             highlightMember(myId, false);
             
+            // DISABLE MIC
+            disableMic();
+            
             stopVolumeMeter();
             broadcastToPeers({ type: 'stopped', id: myId });
             
@@ -949,23 +971,27 @@
             }
         }
 
-        function sendAudioToPeers(blob) {
-            log('Sending audio to ' + peers.size + ' peers');
+        function broadcastToPeers(data) {
+            peers.forEach((peer) => {
+                if (peer.dc && peer.dc.readyState === 'open') {
+                    peer.dc.send(JSON.stringify(data));
+                }
+            });
             
+            sendWs({ type: 'broadcast', payload: data });
+        }
+
+        function sendAudioToPeers(blob) {
             const reader = new FileReader();
             reader.onload = () => {
                 const arrayBuffer = reader.result;
-                peers.forEach((peer, peerId) => {
+                peers.forEach((peer) => {
                     if (peer.dc && peer.dc.readyState === 'open') {
-                        log('Sending audio to: ' + peerId);
-                        // Send in chunks to avoid buffer overflow
                         const chunkSize = 16384;
                         for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
-                            const chunk = arrayBuffer.slice(i, Math.min(i + chunkSize, arrayBuffer.byteLength));
+                            const chunk = arrayBuffer.slice(i, i + chunkSize);
                             peer.dc.send(chunk);
                         }
-                    } else {
-                        log('DC not open for: ' + peerId + ' state: ' + (peer.dc ? peer.dc.readyState : 'no dc'));
                     }
                 });
             };
@@ -974,10 +1000,8 @@
 
         let audioBuffers = new Map();
 
-        function playAudioChunk(data, peerId) {
-            if (!audioBuffers.has(peerId)) {
-                audioBuffers.set(peerId, []);
-            }
+        function playAudioData(data, peerId) {
+            if (!audioBuffers.has(peerId)) audioBuffers.set(peerId, []);
             audioBuffers.get(peerId).push(data);
             
             clearTimeout(window['audioTimeout_' + peerId]);
@@ -992,34 +1016,17 @@
                 const audio = new Audio(url);
                 audio.volume = 1.0;
                 
+                document.getElementById('audioContainer').appendChild(audio);
+                
                 audio.play().then(() => {
                     const peer = peers.get(peerId);
-                    if (peer) {
-                        addMessageToChat(peer.name, '🎙️ Voice message', false);
-                    }
-                }).catch((err) => {
-                    log('Audio play failed: ' + err);
+                    if (peer) addMessageToChat(peer.name, '🎙️ Voice', false, true);
+                }).catch(() => {
+                    showToast('Tap layar untuk enable audio', '🔊');
                 });
                 
-                audio.onended = () => {
-                    URL.revokeObjectURL(url);
-                };
-            }, 200);
-        }
-
-        function broadcastToPeers(data) {
-            log('Broadcasting to ' + peers.size + ' peers');
-            let sentCount = 0;
-            peers.forEach((peer) => {
-                if (peer.dc && peer.dc.readyState === 'open') {
-                    peer.dc.send(JSON.stringify(data));
-                    sentCount++;
-                }
-            });
-            log('Sent to ' + sentCount + ' peers via DC');
-            
-            // Also via WS as fallback
-            sendWs({ type: 'broadcast', payload: data });
+                audio.onended = () => { URL.revokeObjectURL(url); audio.remove(); };
+            }, 300);
         }
 
         // ==================== TEXT CHAT ====================
@@ -1028,22 +1035,17 @@
             const text = input.value.trim();
             if (!text) return;
             
-            log('Sending text: ' + text);
             const msg = { type: 'text', name: myName, text: text, time: Date.now() };
             
-            let dcSent = 0;
             peers.forEach((peer) => {
                 if (peer.dc && peer.dc.readyState === 'open') {
                     peer.dc.send(JSON.stringify(msg));
-                    dcSent++;
                 }
             });
-            log('Text sent via DC to ' + dcSent + ' peers');
             
-            // Fallback via WS
             sendWs({ type: 'broadcast', payload: msg });
             
-            addMessageToChat(myName, text, true);
+            addMessageToChat(myName, text, true, false);
             input.value = '';
         }
 
@@ -1087,7 +1089,7 @@
             document.getElementById('memberCount').textContent = peers.size + 1;
         }
 
-        function addMessageToChat(author, text, isOwn) {
+        function addMessageToChat(author, text, isOwn, isVoice = false) {
             const area = document.getElementById('messagesArea');
             if (area.children.length === 1 && area.children[0].style.textAlign === 'center') {
                 area.innerHTML = '';
