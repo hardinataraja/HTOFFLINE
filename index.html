@@ -236,9 +236,7 @@
                 <button class="ptt-button" id="pttButton" 
                     ontouchstart="handlePttStart(event)" 
                     ontouchend="handlePttEnd(event)"
-                    onmousedown="handlePttStart(event)" 
-                    onmouseup="handlePttEnd(event)"
-                    onmouseleave="handlePttEnd(event)"
+                    ontouchcancel="handlePttEnd(event)"
                     oncontextmenu="return false;">
                     🎙️
                 </button>
@@ -406,6 +404,8 @@
         function cleanupAll() {
             // Stop recording
             if (isRecording) stopTalking();
+
+            stopKeepAlive();
             
             // Close all peer connections
             peers.forEach((peer, peerId) => {
@@ -494,12 +494,14 @@
                         isConnected = true;
                         updateStatus('online');
                         showToast('Terhubung ke server!', '✅');
+                        startKeepAlive();
                         resolve();
                     };
                     
                     ws.onmessage = (event) => {
                         try {
                             const data = JSON.parse(event.data);
+                            if (data.type === 'pong') return; // ignore server pong
                             handleWsMessage(data);
                         } catch (e) {
                             console.error('WS message error:', e);
@@ -515,12 +517,43 @@
                     
                     ws.onclose = () => {
                         isConnected = false;
+                        stopKeepAlive();
                         updateStatus('offline');
+                        // Auto-reconnect jika masih dalam room
+                        if (roomId) {
+                            showToast('Koneksi terputus, reconnecting...', '⚠️');
+                            setTimeout(() => {
+                                if (roomId) reconnectWebSocket();
+                            }, 3000);
+                        }
                     };
                     
                 } catch (err) {
                     reject(err);
                 }
+            });
+        }
+
+        let peerConnectQueue = [];
+        let peerConnectTimer = null;
+
+        function queueConnectToPeer(peerId, name) {
+            peerConnectQueue.push({ peerId, name });
+            if (!peerConnectTimer) {
+                peerConnectTimer = setTimeout(flushPeerQueue, 200);
+            }
+        }
+
+        function flushPeerQueue() {
+            peerConnectTimer = null;
+            const queue = peerConnectQueue.slice();
+            peerConnectQueue = [];
+            queue.forEach((item, index) => {
+                setTimeout(() => {
+                    if (!peers.has(item.peerId)) {
+                        connectToPeer(item.peerId, true);
+                    }
+                }, index * 600); // stagger 600ms antar koneksi
             });
         }
 
@@ -532,7 +565,7 @@
                     if (data.id !== myId && !peers.has(data.id)) {
                         showToast(`${data.name} bergabung!`, '👋');
                         addMemberChip(data.id, data.name);
-                        setTimeout(() => connectToPeer(data.id, true), 800);
+                        queueConnectToPeer(data.id, data.name);
                     }
                     break;
                     
@@ -547,11 +580,64 @@
             }
         }
 
+        let keepAliveInterval = null;
+
+        function startKeepAlive() {
+            stopKeepAlive();
+            keepAliveInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10 * 60 * 1000); // every 10 minutes
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+                keepAliveInterval = null;
+            }
+        }
+
         function sendWs(data) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(data));
             }
         }
+
+        async function reconnectWebSocket() {
+            if (!roomId) return;
+            updateStatus('connecting');
+            try {
+                ws = new WebSocket(serverUrl);
+                ws.onopen = () => {
+                    isConnected = true;
+                    updateStatus('online');
+                    showToast('Reconnected ke server!', '✅');
+                    startKeepAlive();
+                    sendWs({ type: 'join', room: roomId, id: myId, name: myName });
+                };
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'pong') return;
+                        handleWsMessage(data);
+                    } catch (e) {}
+                };
+                ws.onerror = () => {
+                    updateStatus('offline');
+                    setTimeout(() => { if (roomId) reconnectWebSocket(); }, 5000);
+                };
+                ws.onclose = () => {
+                    isConnected = false;
+                    stopKeepAlive();
+                    updateStatus('offline');
+                    if (roomId) setTimeout(() => reconnectWebSocket(), 5000);
+                };
+            } catch (e) {
+                setTimeout(() => { if (roomId) reconnectWebSocket(); }, 5000);
+            }
+        }
+
 
         // ==================== WEBRTC ====================
         function createPeerConnection(peerId) {
@@ -971,6 +1057,23 @@
         document.getElementById('textInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendTextMessage();
         });
+
+        // PTT mouse events via JS (not HTML attr) to avoid double-fire with touch on mobile
+        (function() {
+            let hasTouchSupport = false;
+            window.addEventListener('touchstart', () => { hasTouchSupport = true; }, { once: true, passive: true });
+            
+            const btn = document.getElementById('pttButton');
+            btn.addEventListener('mousedown', (e) => {
+                if (!hasTouchSupport) handlePttStart(e);
+            });
+            btn.addEventListener('mouseup', (e) => {
+                if (!hasTouchSupport) handlePttEnd(e);
+            });
+            btn.addEventListener('mouseleave', (e) => {
+                if (!hasTouchSupport) handlePttEnd(e);
+            });
+        })();
 
         // ==================== UI ====================
         function addMemberChip(id, name) {
