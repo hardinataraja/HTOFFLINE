@@ -120,6 +120,10 @@
         
         .exit-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 8px; color: #e74c3c; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 50; }
         
+        /* Debug panel */
+        .debug-panel { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.9); color: #0f0; font-family: monospace; font-size: 10px; padding: 8px; max-height: 120px; overflow-y: auto; z-index: 9999; display: none; }
+        .debug-panel.show { display: block; }
+        
         @media (max-width: 380px) { .ptt-button { width: 85px; height: 85px; font-size: 30px; } }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -278,9 +282,21 @@
         <span id="toastMessage">Message</span>
     </div>
 
+    <div class="debug-panel" id="debugPanel"></div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script>
+        // ==================== DEBUG ====================
+        function log(msg) {
+            console.log(msg);
+            const panel = document.getElementById('debugPanel');
+            const line = document.createElement('div');
+            line.textContent = new Date().toLocaleTimeString() + ' | ' + msg;
+            panel.appendChild(line);
+            panel.scrollTop = panel.scrollHeight;
+        }
+
         // ==================== STATE ====================
         let localStream = null;
         let mediaRecorder = null;
@@ -384,12 +400,15 @@
 
         // ==================== CLEANUP ====================
         function cleanupAll() {
+            log('CLEANUP started');
+            
             if (isRecording && mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
             isRecording = false;
             
-            peers.forEach((peer) => {
+            peers.forEach((peer, peerId) => {
+                log('Closing peer: ' + peerId);
                 if (peer.pc) peer.pc.close();
             });
             peers.clear();
@@ -430,6 +449,7 @@
             isConnected = false;
             roomId = null;
             myId = generateId();
+            log('CLEANUP done, new ID: ' + myId);
         }
 
         function exitRoom() {
@@ -454,6 +474,7 @@
                 }
                 
                 serverUrl = url;
+                log('WS connecting to: ' + serverUrl);
                 
                 updateStatus('connecting');
                 showToast('Menghubungkan ke server...', '⏳');
@@ -462,6 +483,7 @@
                     ws = new WebSocket(serverUrl);
                     
                     ws.onopen = () => {
+                        log('WS CONNECTED');
                         isConnected = true;
                         updateStatus('online');
                         showToast('Terhubung ke server!', '✅');
@@ -471,19 +493,22 @@
                     ws.onmessage = (event) => {
                         try {
                             const data = JSON.parse(event.data);
+                            log('WS MSG: ' + data.type + ' from ' + (data.sender || 'server'));
                             handleWsMessage(data);
                         } catch (e) {
-                            console.error('WS message error:', e);
+                            log('WS MSG ERROR: ' + e);
                         }
                     };
                     
-                    ws.onerror = () => {
+                    ws.onerror = (err) => {
+                        log('WS ERROR: ' + err);
                         showToast('Gagal konek ke server!', '❌');
                         updateStatus('offline');
-                        reject();
+                        reject(err);
                     };
                     
                     ws.onclose = () => {
+                        log('WS CLOSED');
                         isConnected = false;
                         updateStatus('offline');
                     };
@@ -498,18 +523,22 @@
             switch(data.type) {
                 case 'peer-joined':
                     if (data.id !== myId && !peers.has(data.id)) {
+                        log('Peer joined: ' + data.name + ' (' + data.id + ')');
                         showToast(`${data.name} bergabung!`, '👋');
                         addMemberChip(data.id, data.name);
-                        setTimeout(() => connectToPeer(data.id, true), 800);
+                        // Initiator creates offer to new peer
+                        setTimeout(() => connectToPeer(data.id, true), 500);
                     }
                     break;
                     
                 case 'peer-left':
+                    log('Peer left: ' + data.name);
                     showToast(`${data.name} keluar`, '👋');
                     removePeer(data.id);
                     break;
                     
                 case 'signal':
+                    log('Signal from: ' + data.sender + ' type: ' + data.signal?.type);
                     handleSignal(data);
                     break;
             }
@@ -518,6 +547,9 @@
         function sendWs(data) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(data));
+                log('WS SEND: ' + data.type + ' to ' + (data.target || 'all'));
+            } else {
+                log('WS SEND FAILED: not open');
             }
         }
 
@@ -532,8 +564,6 @@
             
             const pc = new RTCPeerConnection(config);
             
-            // NO AUDIO TRACK - we use DataChannel for audio
-            
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
                     sendWs({
@@ -545,6 +575,7 @@
             };
             
             pc.onconnectionstatechange = () => {
+                log('Peer ' + peerId + ' state: ' + pc.connectionState);
                 if (pc.connectionState === 'connected') {
                     showToast('Peer connected!', '✅');
                 } else if (pc.connectionState === 'failed') {
@@ -554,11 +585,24 @@
                 }
             };
             
+            pc.ondatachannel = (event) => {
+                log('DataChannel received from: ' + peerId);
+                const dc = event.channel;
+                setupDataChannel(dc, peerId);
+                const peer = peers.get(peerId);
+                if (peer) peer.dc = dc;
+            };
+            
             return pc;
         }
 
         async function connectToPeer(peerId, asInitiator) {
-            if (peers.has(peerId)) return;
+            if (peers.has(peerId)) {
+                log('Already has peer: ' + peerId);
+                return;
+            }
+            
+            log('Connecting to peer: ' + peerId + ' asInitiator: ' + asInitiator);
             
             const pc = createPeerConnection(peerId);
             const peerData = {
@@ -569,12 +613,13 @@
             };
             peers.set(peerId, peerData);
             
-            let dc;
             if (asInitiator) {
-                dc = pc.createDataChannel('chat', { ordered: true });
+                log('Creating DataChannel...');
+                const dc = pc.createDataChannel('chat', { ordered: true });
                 setupDataChannel(dc, peerId);
                 peerData.dc = dc;
                 
+                log('Creating offer...');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 
@@ -583,12 +628,6 @@
                     target: peerId,
                     signal: { type: 'offer', sdp: offer }
                 });
-            } else {
-                pc.ondatachannel = (event) => {
-                    dc = event.channel;
-                    setupDataChannel(dc, peerId);
-                    peerData.dc = dc;
-                };
             }
             
             updateMemberCount();
@@ -596,12 +635,14 @@
 
         function setupDataChannel(dc, peerId) {
             dc.onopen = () => {
+                log('✅ DataChannel OPEN with: ' + peerId);
                 dc.send(JSON.stringify({ type: 'intro', name: myName, id: myId }));
             };
             
             dc.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    log('DC MSG from ' + peerId + ': ' + data.type);
                     handleDcMessage(data, peerId);
                 } catch (e) {
                     // Binary audio data
@@ -610,6 +651,14 @@
                     }
                 }
             };
+            
+            dc.onclose = () => {
+                log('DataChannel CLOSED: ' + peerId);
+            };
+            
+            dc.onerror = (err) => {
+                log('DataChannel ERROR: ' + peerId + ' - ' + err);
+            };
         }
 
         async function handleSignal(data) {
@@ -617,6 +666,7 @@
             let peer = peers.get(peerId);
             
             if (data.signal.type === 'offer') {
+                log('Received OFFER from: ' + peerId);
                 if (!peer) {
                     await connectToPeer(peerId, false);
                     peer = peers.get(peerId);
@@ -631,8 +681,10 @@
                         target: peerId,
                         signal: { type: 'answer', sdp: answer }
                     });
+                    log('Sent ANSWER to: ' + peerId);
                 }
             } else if (data.signal.type === 'answer') {
+                log('Received ANSWER from: ' + peerId);
                 if (peer) {
                     await peer.pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
                 }
@@ -641,7 +693,7 @@
                     try {
                         await peer.pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
                     } catch (e) {
-                        console.error('ICE error:', e);
+                        log('ICE error: ' + e);
                     }
                 }
             }
@@ -657,10 +709,12 @@
                         peer.id = data.id;
                         addMemberChip(data.id, data.name);
                         updateMemberCount();
+                        log('Peer intro: ' + data.name);
                     }
                     break;
                     
                 case 'text':
+                    log('TEXT from ' + (data.senderName || peer?.name) + ': ' + data.text);
                     addMessageToChat(data.senderName || peer?.name || 'Peer', data.text, false);
                     break;
                     
@@ -858,23 +912,21 @@
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
-                        // Stream chunks in real-time
-                        sendAudioChunkToPeers(event.data);
                     }
                 };
                 
                 mediaRecorder.onstop = () => {
-                    // Send any remaining chunks
+                    log('MediaRecorder stopped, chunks: ' + audioChunks.length);
                     if (audioChunks.length > 0) {
                         const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                        sendAudioBlobToPeers(blob);
+                        sendAudioToPeers(blob);
                     }
-                    addMessageToChat(myName, '🎙️ Voice message', true);
                 };
                 
-                // Collect every 100ms for near real-time
                 mediaRecorder.start(100);
+                log('MediaRecorder started');
             } catch (err) {
+                log('MediaRecorder error: ' + err);
                 showToast('Gagal merekam: ' + err.message, '❌');
                 stopTalking();
             }
@@ -897,26 +949,23 @@
             }
         }
 
-        function sendAudioChunkToPeers(chunk) {
+        function sendAudioToPeers(blob) {
+            log('Sending audio to ' + peers.size + ' peers');
+            
             const reader = new FileReader();
             reader.onload = () => {
                 const arrayBuffer = reader.result;
-                peers.forEach((peer) => {
+                peers.forEach((peer, peerId) => {
                     if (peer.dc && peer.dc.readyState === 'open') {
-                        peer.dc.send(arrayBuffer);
-                    }
-                });
-            };
-            reader.readAsArrayBuffer(chunk);
-        }
-
-        function sendAudioBlobToPeers(blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const arrayBuffer = reader.result;
-                peers.forEach((peer) => {
-                    if (peer.dc && peer.dc.readyState === 'open') {
-                        peer.dc.send(arrayBuffer);
+                        log('Sending audio to: ' + peerId);
+                        // Send in chunks to avoid buffer overflow
+                        const chunkSize = 16384;
+                        for (let i = 0; i < arrayBuffer.byteLength; i += chunkSize) {
+                            const chunk = arrayBuffer.slice(i, Math.min(i + chunkSize, arrayBuffer.byteLength));
+                            peer.dc.send(chunk);
+                        }
+                    } else {
+                        log('DC not open for: ' + peerId + ' state: ' + (peer.dc ? peer.dc.readyState : 'no dc'));
                     }
                 });
             };
@@ -926,18 +975,12 @@
         let audioBuffers = new Map();
 
         function playAudioChunk(data, peerId) {
-            // Accumulate chunks and play as continuous stream
             if (!audioBuffers.has(peerId)) {
                 audioBuffers.set(peerId, []);
             }
             audioBuffers.get(peerId).push(data);
             
-            // Clear previous timeout
-            if (window['audioTimeout_' + peerId]) {
-                clearTimeout(window['audioTimeout_' + peerId]);
-            }
-            
-            // Play after short delay to accumulate chunks
+            clearTimeout(window['audioTimeout_' + peerId]);
             window['audioTimeout_' + peerId] = setTimeout(() => {
                 const chunks = audioBuffers.get(peerId);
                 audioBuffers.set(peerId, []);
@@ -952,10 +995,10 @@
                 audio.play().then(() => {
                     const peer = peers.get(peerId);
                     if (peer) {
-                        addMessageToChat(peer.name, '🎙️ Voice', false);
+                        addMessageToChat(peer.name, '🎙️ Voice message', false);
                     }
                 }).catch((err) => {
-                    console.log('Audio play failed:', err);
+                    log('Audio play failed: ' + err);
                 });
                 
                 audio.onended = () => {
@@ -965,12 +1008,17 @@
         }
 
         function broadcastToPeers(data) {
+            log('Broadcasting to ' + peers.size + ' peers');
+            let sentCount = 0;
             peers.forEach((peer) => {
                 if (peer.dc && peer.dc.readyState === 'open') {
                     peer.dc.send(JSON.stringify(data));
+                    sentCount++;
                 }
             });
+            log('Sent to ' + sentCount + ' peers via DC');
             
+            // Also via WS as fallback
             sendWs({ type: 'broadcast', payload: data });
         }
 
@@ -980,14 +1028,19 @@
             const text = input.value.trim();
             if (!text) return;
             
+            log('Sending text: ' + text);
             const msg = { type: 'text', name: myName, text: text, time: Date.now() };
             
+            let dcSent = 0;
             peers.forEach((peer) => {
                 if (peer.dc && peer.dc.readyState === 'open') {
                     peer.dc.send(JSON.stringify(msg));
+                    dcSent++;
                 }
             });
+            log('Text sent via DC to ' + dcSent + ' peers');
             
+            // Fallback via WS
             sendWs({ type: 'broadcast', payload: msg });
             
             addMessageToChat(myName, text, true);
