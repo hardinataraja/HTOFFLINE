@@ -121,6 +121,8 @@
         
         #audioContainer { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
         
+        .exit-btn { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 8px; color: #e74c3c; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 50; }
+        
         @media (max-width: 380px) { .ptt-button { width: 85px; height: 85px; font-size: 30px; } }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -178,6 +180,8 @@
     </div>
 
     <div class="main-content" id="mainContent" style="display: none;">
+        
+        <button class="exit-btn" onclick="exitRoom()" title="Keluar Channel">✕</button>
         
         <div class="channel-bar">
             <div class="channel-info">
@@ -284,11 +288,12 @@
     <script>
         // ==================== STATE ====================
         let localStream = null;
+        let mutedStream = null; // Stream with tracks disabled
         let mediaRecorder = null;
         let audioChunks = [];
         let isRecording = false;
         let isHandsfree = false;
-        let peers = new Map(); // peerId -> {pc, dc, name, audioElement}
+        let peers = new Map();
         let myId = generateId();
         let myName = 'User';
         let roomId = null;
@@ -340,7 +345,7 @@
             }
         }
 
-        // ==================== AUDIO ====================
+        // ==================== AUDIO - MUTED BY DEFAULT ====================
         async function initAudio() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ 
@@ -353,6 +358,11 @@
                     } 
                 });
                 
+                // CRITICAL: Mute all tracks by default!
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = false;
+                });
+                
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 const source = audioContext.createMediaStreamSource(localStream);
@@ -363,6 +373,18 @@
             } catch (err) {
                 showToast('Izin mikrofon ditolak! ' + err.message, '❌');
                 return false;
+            }
+        }
+
+        function enableMic() {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => track.enabled = true);
+            }
+        }
+
+        function disableMic() {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => track.enabled = false);
             }
         }
 
@@ -383,12 +405,76 @@
             document.getElementById('volumeFill').style.width = '0%';
         }
 
+        // ==================== CLEANUP ====================
+        function cleanupAll() {
+            // Stop recording
+            if (isRecording) stopTalking();
+            
+            // Close all peer connections
+            peers.forEach((peer, peerId) => {
+                if (peer.audioElement) {
+                    peer.audioElement.pause();
+                    peer.audioElement.remove();
+                }
+                if (peer.pc) peer.pc.close();
+            });
+            peers.clear();
+            
+            // Close WebSocket
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // Reset audio context
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            // Clear UI
+            document.getElementById('membersPanel').innerHTML = `
+                <div class="member-chip" id="selfChip">
+                    <div class="member-avatar" id="selfAvatar">U</div>
+                    <span id="selfName">You</span>
+                    <div class="sound-wave" id="selfWave" style="display: none;">
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('messagesArea').innerHTML = `
+                <div style="text-align: center; color: #8b8b9e; padding: 30px 20px; font-size: 13px;">
+                    <p>🎙️ Channel siap!</p>
+                    <p style="margin-top: 6px; font-size: 11px;">Tekan tombol PTT atau kirim pesan teks</p>
+                </div>
+            `;
+            
+            isConnected = false;
+            roomId = null;
+            myId = generateId(); // Generate new ID
+        }
+
+        function exitRoom() {
+            cleanupAll();
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('setupScreen').classList.remove('hidden');
+            updateStatus('offline');
+            showToast('Keluar dari channel', '👋');
+        }
+
         // ==================== WEBSOCKET ====================
         function connectWebSocket() {
             return new Promise((resolve, reject) => {
                 let url = document.getElementById('serverUrl').value.trim() || 'https://walkie-signaling.onrender.com';
                 
-                // Convert http/https to ws/wss
                 if (url.startsWith('https://')) {
                     url = url.replace('https://', 'wss://');
                 } else if (url.startsWith('http://')) {
@@ -433,7 +519,6 @@
                     ws.onclose = () => {
                         isConnected = false;
                         updateStatus('offline');
-                        showToast('Koneksi terputus', '⚠️');
                     };
                     
                 } catch (err) {
@@ -450,7 +535,6 @@
                     if (data.id !== myId && !peers.has(data.id)) {
                         showToast(`${data.name} bergabung!`, '👋');
                         addMemberChip(data.id, data.name);
-                        // Initiate WebRTC connection as initiator
                         setTimeout(() => connectToPeer(data.id, true), 800);
                     }
                     break;
@@ -483,6 +567,7 @@
             
             const pc = new RTCPeerConnection(config);
             
+            // Add tracks BUT muted by default
             if (localStream) {
                 localStream.getTracks().forEach(track => {
                     pc.addTrack(track, localStream);
@@ -503,11 +588,10 @@
                 
                 document.getElementById('audioContainer').appendChild(audioEl);
                 
-                // Try to play immediately
                 const playPromise = audioEl.play();
                 if (playPromise) {
                     playPromise.catch(err => {
-                        console.log('Autoplay blocked, will retry on interaction');
+                        console.log('Autoplay blocked:', err);
                     });
                 }
                 
@@ -545,10 +629,7 @@
         }
 
         async function connectToPeer(peerId, asInitiator) {
-            if (peers.has(peerId)) {
-                console.log('Already connected to', peerId);
-                return;
-            }
+            if (peers.has(peerId)) return;
             
             console.log('🔄 Connecting to peer:', peerId, 'initiator:', asInitiator);
             
@@ -565,12 +646,10 @@
             
             let dc;
             if (asInitiator) {
-                console.log('Creating data channel...');
                 dc = pc.createDataChannel('chat', { ordered: true });
                 setupDataChannel(dc, peerId);
                 peerData.dc = dc;
                 
-                console.log('Creating offer...');
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 
@@ -579,11 +658,8 @@
                     target: peerId,
                     signal: { type: 'offer', sdp: offer }
                 });
-                
-                console.log('Offer sent to', peerId);
             } else {
                 pc.ondatachannel = (event) => {
-                    console.log('Received data channel from', peerId);
                     dc = event.channel;
                     setupDataChannel(dc, peerId);
                     peerData.dc = dc;
@@ -609,24 +685,13 @@
                     }
                 }
             };
-            
-            dc.onclose = () => {
-                console.log('Data channel closed with', peerId);
-            };
-            
-            dc.onerror = (err) => {
-                console.error('Data channel error:', err);
-            };
         }
 
         async function handleSignal(data) {
             const peerId = data.sender;
-            console.log('Received signal:', data.signal.type, 'from', peerId);
-            
             let peer = peers.get(peerId);
             
             if (data.signal.type === 'offer') {
-                console.log('Processing offer from', peerId);
                 if (!peer) {
                     await connectToPeer(peerId, false);
                     peer = peers.get(peerId);
@@ -641,11 +706,8 @@
                         target: peerId,
                         signal: { type: 'answer', sdp: answer }
                     });
-                    
-                    console.log('Answer sent to', peerId);
                 }
             } else if (data.signal.type === 'answer') {
-                console.log('Processing answer from', peerId);
                 if (peer) {
                     await peer.pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
                 }
@@ -670,7 +732,6 @@
                         peer.id = data.id;
                         addMemberChip(data.id, data.name);
                         updateMemberCount();
-                        showToast(`${data.name} siap!`, '✅');
                     }
                     break;
                     
@@ -690,20 +751,22 @@
 
         // ==================== ROOM MANAGEMENT ====================
         async function createRoom() {
+            // Cleanup first if reconnecting
+            cleanupAll();
+            
             myName = document.getElementById('userName').value.trim() || 'User';
             roomId = generateRoomCode().replace('-', '');
             
             try {
                 await connectWebSocket();
             } catch (err) {
-                showToast('Gagal konek server! Cek URL', '❌');
+                showToast('Gagal konek server!', '❌');
                 return;
             }
             
             const success = await initAudio();
             if (!success) return;
             
-            // Join room
             sendWs({
                 type: 'join',
                 room: roomId,
@@ -731,6 +794,9 @@
         }
 
         async function joinRoom() {
+            // Cleanup first if reconnecting
+            cleanupAll();
+            
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase().replace('-', '');
             if (code.length < 8) {
                 showToast('Kode tidak valid!', '❌');
@@ -743,7 +809,7 @@
             try {
                 await connectWebSocket();
             } catch (err) {
-                showToast('Gagal konek server! Cek URL', '❌');
+                showToast('Gagal konek server!', '❌');
                 return;
             }
             
@@ -852,6 +918,9 @@
             document.getElementById('selfWave').style.display = 'flex';
             highlightMember(myId, true);
             
+            // ENABLE MIC
+            enableMic();
+            
             startVolumeMeter();
             broadcastToPeers({ type: 'speaking', id: myId });
             
@@ -891,6 +960,9 @@
             document.getElementById('selfWave').style.display = 'none';
             highlightMember(myId, false);
             
+            // DISABLE MIC
+            disableMic();
+            
             stopVolumeMeter();
             broadcastToPeers({ type: 'stopped', id: myId });
             
@@ -906,7 +978,6 @@
                 }
             });
             
-            // Fallback via WS
             sendWs({ type: 'broadcast', payload: data });
         }
 
